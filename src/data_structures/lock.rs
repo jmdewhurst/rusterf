@@ -1,11 +1,12 @@
 #[warn(clippy::pedantic)]
 #[allow(non_snake_case)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum Mode {
     Enabled,
+    #[default]
     Disabled,
 }
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Servo {
     pub gain_P: f32,
     pub gain_I: f32,
@@ -14,31 +15,29 @@ pub struct Servo {
     integral: f32,
     last_error: f32,
 
-    // approx. time between samples. Helps use standard PID tuning methods
-    // like Ziegler-Nichols.
-    pub sample_time_sec: f32,
+    // approx. time between samples. In effect, the actual integral gain is
+    // <gain_I * sample_time_sec> and actual derivative gain is
+    // <gain_D / sample_time_sec>. There's no functional difference, but this
+    // scheme is a bit more consistent with standard PID tuning methods like Ziegler-Nichols.
+    pub sample_time_sec: Option<f32>,
 
     setpoint: f32,
     error_feedback: f32,
     pub mode: Mode,
+
+    pub max_feedback_step_size: f32,
+    pub max_feedback_value: f32,
+    pub min_feedback_value: f32,
 }
 
 impl Servo {
     pub fn new() -> Self {
         Servo {
-            gain_P: 0.0,
-            gain_I: 0.0,
-            gain_D: 0.0,
-            alpha_I: 0.0,
-            integral: 0.0,
-            last_error: 0.0,
-            sample_time_sec: 1.0,
-            setpoint: 0.0,
-            error_feedback: 0.0,
-            mode: Mode::Disabled,
+            ..Default::default()
         }
     }
-    pub fn new_error(&mut self, new_error: f32) {
+
+    pub fn do_pid(&mut self, new_error: f32) {
         let err = if new_error.is_nan() {
             self.last_error
         } else {
@@ -47,10 +46,15 @@ impl Servo {
         match self.mode {
             Mode::Enabled => {
                 self.integral *= self.alpha_I;
-                self.integral += err * self.sample_time_sec;
-                let deriv_term = self.gain_D * (err - self.last_error) / self.sample_time_sec;
+                let deriv_term;
+                if let Some(x) = self.sample_time_sec {
+                    self.integral += err * x;
+                    deriv_term = self.gain_D * (err - self.last_error) / x;
+                } else {
+                    self.integral += err;
+                    deriv_term = self.gain_D * (err - self.last_error);
+                }
                 let integral_term = self.gain_I * self.integral;
-                println!("deriv, {}, int {}", deriv_term, integral_term);
                 self.error_feedback += err * self.gain_P + deriv_term + integral_term;
             }
             Mode::Disabled => {}

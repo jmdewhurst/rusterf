@@ -13,11 +13,11 @@ fn main() {
     mylock.gain_I = 0.1;
     mylock.enable();
     println!("{}", mylock.error_feedback());
-    println!("{:?}", mylock);
-    mylock.new_error(2.0);
+    // println!("{:?}", mylock);
+    mylock.do_pid(2.0);
     println!("{}", mylock.error_feedback());
-    println!("{:?}", mylock);
-    mylock.new_error(2.0);
+    // println!("{:?}", mylock);
+    mylock.do_pid(2.0);
     println!("{}", mylock.error_feedback());
-    println!("{:?}", mylock);
+    // println!("{:?}", mylock);
 }
