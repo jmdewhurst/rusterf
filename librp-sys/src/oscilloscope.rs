@@ -3,10 +3,12 @@
 #![allow(non_snake_case)]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
+#![allow(clippy::wildcard_imports)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::unused_self)]
 use crate::core::{APIError, APIError::RP_OK, APIResult, Channel};
-use crate::{core, pitaya};
+use crate::{core, pitaya, resources};
 use enum_primitive::*;
-use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ptr::read_volatile;
 
@@ -36,6 +38,7 @@ pub enum TrigSrc {
 }
 }
 
+#[derive(Debug)]
 pub struct ScopeRegion {
     skip_start: u32,
     skip_end: u32,
@@ -43,16 +46,17 @@ pub struct ScopeRegion {
     num_points: usize,
 }
 
+#[derive(Debug)]
 pub struct Oscilloscope<'a> {
     chA_buff_raw: *const u32,
     chB_buff_raw: *const u32,
     region: ScopeRegion,
-    phantom: PhantomData<&'a pitaya::Pitaya>,
+    _resource: &'a mut resources::ScopeResource,
 }
 
 impl<'a> Oscilloscope<'a> {
     #[must_use]
-    pub fn init(_: &'a pitaya::Pitaya) -> Self {
+    pub fn init(pit: &'a mut pitaya::Pitaya) -> Self {
         Oscilloscope {
             chA_buff_raw: unsafe { core::rp_jmd_AcqGetRawBuffer(0) },
             chB_buff_raw: unsafe { core::rp_jmd_AcqGetRawBuffer(1) },
@@ -62,7 +66,7 @@ impl<'a> Oscilloscope<'a> {
                 skip_rate: 1,
                 num_points: 16834,
             },
-            phantom: PhantomData,
+            _resource: &mut pit.scope_resource,
         }
     }
 

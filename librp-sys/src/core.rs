@@ -1,9 +1,9 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
-
-#[warn(clippy::pedantic)]
-#[warn(clippy::all)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::all)]
+#![allow(clippy::wildcard_imports)]
 use enum_primitive::*;
 
 include!("bindings.rs");

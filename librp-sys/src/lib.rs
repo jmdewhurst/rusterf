@@ -5,3 +5,5 @@ pub mod dpin;
 pub mod generator;
 pub mod oscilloscope;
 pub mod pitaya;
+
+mod resources;

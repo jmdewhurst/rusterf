@@ -3,8 +3,10 @@
 #![allow(non_snake_case)]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
+#![allow(clippy::wildcard_imports)]
+#![allow(clippy::cast_possible_truncation)]
 use crate::core::{APIError, APIError::RP_OK, APIResult};
-use crate::{core, pitaya};
+use crate::{core, pitaya, resources};
 use enum_primitive::*;
 use std::ffi::c_int;
 use std::marker::PhantomData;
@@ -47,15 +49,17 @@ pub enum GenTriggerSource {
 }
 }
 
+#[derive(Debug)]
 pub struct Channel<'a> {
     core_ch: core::Channel,
     phantom: PhantomData<&'a Generator<'a>>,
 }
 
+#[derive(Debug)]
 pub struct Generator<'a> {
     pub ch_a: Channel<'a>,
     pub ch_b: Channel<'a>,
-    phantom: PhantomData<&'a pitaya::Pitaya>,
+    _resource: &'a mut resources::GeneratorResource,
 }
 
 impl<'a> Channel<'a> {
@@ -285,7 +289,7 @@ impl<'a> Channel<'a> {
 
 impl<'a> Generator<'a> {
     #[must_use]
-    pub fn init(_: &'a pitaya::Pitaya) -> Self {
+    pub fn init(pit: &'a mut pitaya::Pitaya) -> Self {
         Generator {
             ch_a: Channel {
                 core_ch: core::Channel::CH_1,
@@ -295,11 +299,12 @@ impl<'a> Generator<'a> {
                 core_ch: core::Channel::CH_2,
                 phantom: PhantomData,
             },
-            phantom: PhantomData,
+            _resource: &mut pit.generator_resource,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct PulseChannel<'a> {
     ch: &'a mut Channel<'a>,
     _waveform: Vec<f32>,

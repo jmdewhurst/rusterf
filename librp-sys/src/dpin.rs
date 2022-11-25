@@ -3,10 +3,11 @@
 #![allow(non_snake_case)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::all)]
+#![allow(clippy::wildcard_imports)]
 use crate::core::{APIError, APIError::RP_OK, APIResult};
-use crate::{core, pitaya};
+use crate::{core, pitaya, resources};
 use enum_primitive::*;
-use std::marker::PhantomData;
+// use std::marker::PhantomData;
 // use std::mem::MaybeUninit;
 
 enum_from_primitive! {
@@ -56,15 +57,16 @@ pub enum PinDirection {
 }
 }
 
+#[derive(Debug)]
 pub struct DigitalPin<'a> {
-    phantom: PhantomData<&'a pitaya::Pitaya>,
+    _resource: &'a mut resources::DPinResource,
 }
 
 impl<'a> DigitalPin<'a> {
     #[must_use]
-    pub fn init(_: &'a pitaya::Pitaya) -> Self {
+    pub fn init(pit: &'a mut pitaya::Pitaya) -> Self {
         DigitalPin {
-            phantom: PhantomData,
+            _resource: &mut pit.dpin_resource,
         }
     }
 

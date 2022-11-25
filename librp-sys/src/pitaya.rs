@@ -7,12 +7,18 @@ use crate::core as rp;
 use enum_primitive::FromPrimitive;
 use std::process::Command;
 
+use crate::resources;
+
 pub enum InitializationError {
     FAILED_TO_LOAD_FPGA_IMAGE,
     API_FAILED(rp::APIError),
 }
 
-pub struct Pitaya {}
+pub struct Pitaya {
+    pub(crate) scope_resource: resources::ScopeResource,
+    pub(crate) generator_resource: resources::GeneratorResource,
+    pub(crate) dpin_resource: resources::DPinResource,
+}
 
 impl Pitaya {
     /// # Errors
@@ -38,7 +44,11 @@ impl Pitaya {
 
         if let Some(errcode) = rp::APIError::from_i32(unsafe { rp::rp_InitReset(true) }) {
             match errcode {
-                rp::APIError::RP_OK => Ok(Pitaya {}),
+                rp::APIError::RP_OK => Ok(Pitaya {
+                    scope_resource: resources::ScopeResource {},
+                    generator_resource: resources::GeneratorResource {},
+                    dpin_resource: resources::DPinResource {},
+                }),
                 _ => Err(InitializationError::API_FAILED(errcode)),
             }
         } else {
