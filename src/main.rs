@@ -1,7 +1,7 @@
 #[allow(dead_code)]
+#[allow(non_snake_case)]
 #[warn(clippy::pedantic)]
 #[warn(clippy::all)]
-#[allow(non_snake_case)]
 mod data_structures;
 
 // use data_structures::circle_buffer;
