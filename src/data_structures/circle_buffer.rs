@@ -1,15 +1,16 @@
 use core::cmp::min;
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct CircleBuffer2n<T: Copy + Default> {
     data: Vec<T>,
-    n: u8,
+    n: usize,
     len: usize,
     posn: usize,
 }
 
 impl<T: Copy + Default> CircleBuffer2n<T> {
-    pub fn new(n: u8) -> Self {
+    pub fn new(n: usize) -> Self {
         let mut buff = Vec::<T>::with_capacity(1 << n);
         for _ in 0..(1 << n) {
             buff.push(Default::default());
@@ -26,7 +27,7 @@ impl<T: Copy + Default> CircleBuffer2n<T> {
         self.len
     }
 
-    pub fn exponent(&self) -> u8 {
+    pub fn exponent(&self) -> usize {
         self.n
     }
 

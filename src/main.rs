@@ -1,8 +1,13 @@
-#[allow(dead_code)]
-#[allow(non_snake_case)]
-#[warn(clippy::pedantic)]
-#[warn(clippy::all)]
+#![allow(dead_code)]
+#![allow(non_snake_case)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::all)]
+
+extern crate librp_sys;
+extern crate zmq;
+
 mod data_structures;
+mod multifit;
 
 // use data_structures::circle_buffer;
 use data_structures::lock;

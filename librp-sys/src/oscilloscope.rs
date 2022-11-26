@@ -1,11 +1,10 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
-#![warn(clippy::all)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::unused_self)]
+
 use crate::core::{APIError, APIError::RP_OK, APIResult, Channel};
 use crate::{core, pitaya, resources};
 use enum_primitive::*;
@@ -50,6 +49,9 @@ pub struct ScopeRegion {
 pub struct Oscilloscope<'a> {
     chA_buff_raw: *const u32,
     chB_buff_raw: *const u32,
+    // maintains arrays of recent scope data, culled to ``region`` and converted to floating pt
+    pub chA_buff_float: Vec<f32>,
+    pub chB_buff_float: Vec<f32>,
     region: ScopeRegion,
     _resource: &'a mut resources::ScopeResource,
 }
@@ -60,6 +62,8 @@ impl<'a> Oscilloscope<'a> {
         Oscilloscope {
             chA_buff_raw: unsafe { core::rp_jmd_AcqGetRawBuffer(0) },
             chB_buff_raw: unsafe { core::rp_jmd_AcqGetRawBuffer(1) },
+            chA_buff_float: Vec::with_capacity(16384),
+            chB_buff_float: Vec::with_capacity(16384),
             region: ScopeRegion {
                 skip_start: 0,
                 skip_end: 0,
@@ -80,6 +84,10 @@ impl<'a> Oscilloscope<'a> {
         let end_clamped = skip_end.clamp(0, 16383 - skip_start);
         let rate_clamped = skip_rate.clamp(1, 16383 - start_clamped - end_clamped);
         let num_points = ((16384 - start_clamped - end_clamped) + rate_clamped - 1) / rate_clamped;
+        self.chA_buff_float = Vec::new();
+        self.chA_buff_float.reserve_exact(num_points as usize);
+        self.chB_buff_float = Vec::new();
+        self.chB_buff_float.reserve_exact(num_points as usize);
         self.region = ScopeRegion {
             skip_start: start_clamped,
             skip_end: end_clamped,
@@ -198,6 +206,7 @@ impl<'a> Oscilloscope<'a> {
         // do a single read from the FPGA registers of the data we need, and then we can cache
         // those vectors while we do math on them.
         let index = self.get_write_index_at_trigger()?;
+        // TODO: vec exact capacity?
         let mut ret_a = Vec::with_capacity(self.region.num_points);
         let mut ret_b = Vec::with_capacity(self.region.num_points);
         for i in (self.region.skip_start..(16384 - self.region.skip_end))
@@ -217,6 +226,36 @@ impl<'a> Oscilloscope<'a> {
             });
         }
         Ok((ret_a, ret_b))
+    }
+
+    /// updates the ``Oscilloscope``'s internal buffers with most recent scope data.
+    /// Provided as an alternative to ``get_scope_data_both`` that avoids heap allocation.
+    /// # Errors
+    /// If an RP API call returns a failure code, this returns Err containing the failure.
+    /// In case of an error, the state of the buffers is unspecified.
+    /// # Panics
+    /// Panics if the RP API returns a catastrophically wrong value
+    pub fn update_scope_data_both(&mut self) -> APIResult<()> {
+        let index = self.get_write_index_at_trigger()?;
+        let mut ret_a = Vec::with_capacity(self.region.num_points);
+        let mut ret_b = Vec::with_capacity(self.region.num_points);
+        for i in (self.region.skip_start..(16384 - self.region.skip_end))
+            .step_by(self.region.skip_rate as usize)
+        {
+            ret_a.push(unsafe {
+                read_volatile(
+                    self.chA_buff_raw
+                        .offset((index.wrapping_add(i)) as isize % 16384),
+                )
+            });
+            ret_b.push(unsafe {
+                read_volatile(
+                    self.chB_buff_raw
+                        .offset((index.wrapping_add(i)) as isize % 16384),
+                )
+            });
+        }
+        Ok(())
     }
 
     /// # Errors

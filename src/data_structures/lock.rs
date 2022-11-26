@@ -1,5 +1,6 @@
-#[warn(clippy::pedantic)]
-#[allow(non_snake_case)]
+#![warn(clippy::pedantic)]
+#![allow(non_snake_case)]
+
 #[derive(Debug, Default)]
 pub enum Mode {
     Enabled,
@@ -11,7 +12,7 @@ pub struct Servo {
     pub gain_P: f32,
     pub gain_I: f32,
     pub gain_D: f32,
-    pub alpha_I: f32, // the 'decay rate' -- each step, the integral is multiplied by this value
+    alpha_I: f32, // the 'decay rate' -- each step, the integral is multiplied by this value
     integral: f32,
     last_error: f32,
 
@@ -37,12 +38,21 @@ impl Servo {
         }
     }
 
-    pub fn do_pid(&mut self, new_error: f32) {
+    pub fn do_pid(&mut self, new_error: f32) -> f32 {
         let err = if new_error.is_nan() {
             self.last_error
         } else {
             new_error
         };
+        let adjustment = self
+            .pid_core(err)
+            .clamp(-self.max_feedback_step_size, self.max_feedback_step_size);
+        self.error_feedback = (self.error_feedback + adjustment)
+            .clamp(self.min_feedback_value, self.max_feedback_step_size);
+        self.error_feedback
+    }
+
+    fn pid_core(&mut self, err: f32) -> f32 {
         match self.mode {
             Mode::Enabled => {
                 self.integral *= self.alpha_I;
@@ -55,11 +65,10 @@ impl Servo {
                     deriv_term = self.gain_D * (err - self.last_error);
                 }
                 let integral_term = self.gain_I * self.integral;
-                self.error_feedback += err * self.gain_P + deriv_term + integral_term;
+                err * self.gain_P + deriv_term + integral_term
             }
-            Mode::Disabled => {}
+            Mode::Disabled => 0.,
         }
-        self.last_error = err;
     }
 
     pub fn enable(&mut self) {
@@ -76,6 +85,10 @@ impl Servo {
         } else {
             new_alpha.min(1.0).max(0.0)
         };
+    }
+
+    pub fn alpha_I(&self) -> f32 {
+        self.alpha_I
     }
 
     pub fn reset_integral(&mut self) {

@@ -1,5 +1,6 @@
-pub mod circle_buffer;
+mod circle_buffer;
 mod interferometer;
-pub mod laser;
+mod laser;
+pub use laser::Laser;
 pub mod lock;
 pub use crate::data_structures::interferometer::Interferometer;
