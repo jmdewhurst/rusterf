@@ -1,11 +1,21 @@
 #![warn(clippy::pedantic)]
 #![allow(non_snake_case)]
 
+use std::fmt;
+
 #[derive(Debug, Default)]
 pub enum Mode {
     Enabled,
     #[default]
     Disabled,
+}
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Mode::Enabled => write!(f, "Enabled"),
+            Mode::Disabled => write!(f, "Disabled"),
+        }
+    }
 }
 #[derive(Debug, Default)]
 pub struct Servo {

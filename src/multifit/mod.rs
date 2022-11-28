@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 #![allow(clippy::similar_names)]
 
 use std::ffi::c_int;

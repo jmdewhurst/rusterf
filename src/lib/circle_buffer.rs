@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 use core::cmp::min;
 
 #[allow(clippy::module_name_repetitions)]
@@ -10,17 +11,23 @@ pub struct CircleBuffer2n<T: Copy + Default> {
 }
 
 impl<T: Copy + Default> CircleBuffer2n<T> {
-    pub fn new(n: usize) -> Self {
+    pub fn new(n: usize) -> Option<Self> {
+        // semi-arbitrary maximum size -- at the moment, we limit log length to about 1M entries.
+        // One could expand this, but you may run into issues trying to allocate a very large
+        // array. You probably shouldn't be storing that many values in a basic array, though.
+        if n > 20 {
+            return None;
+        };
         let mut buff = Vec::<T>::with_capacity(1 << n);
         for _ in 0..(1 << n) {
             buff.push(Default::default());
         }
-        CircleBuffer2n {
+        Some(CircleBuffer2n {
             data: buff,
             n,
             len: (1 << n),
             posn: (1 << n) - 1,
-        }
+        })
     }
 
     pub fn len(&self) -> usize {

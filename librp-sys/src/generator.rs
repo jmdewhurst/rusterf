@@ -49,6 +49,8 @@ pub enum GenTriggerSource {
 }
 }
 
+/// Nomenclature possibly confusing with Rust's thread-safe ``Channel``. Keeping this way for
+/// consistency with the underlying Red Pitaya API.
 #[derive(Debug)]
 pub struct Channel<'a> {
     core_ch: core::Channel,

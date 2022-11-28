@@ -6,11 +6,11 @@
 extern crate librp_sys;
 extern crate zmq;
 
-mod data_structures;
+mod lib;
 mod multifit;
 
 // use data_structures::circle_buffer;
-use data_structures::lock;
+use lib::lock;
 
 fn main() {
     let mut mylock = lock::Servo::new();
