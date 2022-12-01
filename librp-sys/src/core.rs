@@ -5,6 +5,7 @@
 #![warn(clippy::all)]
 #![allow(clippy::wildcard_imports)]
 use enum_primitive::*;
+use serde::{Deserialize, Serialize};
 
 include!("bindings.rs");
 
@@ -43,7 +44,7 @@ pub enum APIError {
 pub type APIResult<T> = Result<T, APIError>;
 
 enum_from_primitive! {
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub enum Channel {
     CH_1 = 0,

@@ -1,5 +1,7 @@
 #[warn(clippy::pedantic)]
 #[warn(clippy::all)]
+extern crate serde;
+
 pub mod core;
 pub mod dpin;
 pub mod generator;

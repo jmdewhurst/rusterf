@@ -3,26 +3,24 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::all)]
 
-extern crate librp_sys;
-extern crate zmq;
-
+extern crate toml;
 mod lib;
 mod multifit;
-
-// use data_structures::circle_buffer;
-use lib::lock;
+use lib::Laser;
 
 fn main() {
-    let mut mylock = lock::Servo::new();
-    mylock.gain_P = 1.0;
-    mylock.gain_I = 0.1;
-    mylock.enable();
-    println!("{}", mylock.error_feedback());
-    // println!("{:?}", mylock);
-    mylock.do_pid(2.0);
-    println!("{}", mylock.error_feedback());
-    // println!("{:?}", mylock);
-    mylock.do_pid(2.0);
-    println!("{}", mylock.error_feedback());
-    // println!("{:?}", mylock);
+    let mut las = Laser::new(4).unwrap();
+    las.set_wavelength(1500.0, 3000.0, 1.5);
+
+    println!("{:?}", las);
+
+    let filename = "test.toml";
+    let toml_string = toml::to_string(&las).expect("Could not encode TOML value");
+    println!("{}", toml_string);
+    std::fs::write(filename, toml_string).expect("Could not write to file!");
+
+    let contents = std::fs::read_to_string(filename).unwrap();
+    println!("{}", contents);
+    let data: Laser = toml::from_str(&contents).unwrap();
+    println!("final: {:?}", data);
 }

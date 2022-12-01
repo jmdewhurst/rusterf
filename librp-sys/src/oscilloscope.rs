@@ -52,6 +52,9 @@ pub struct Oscilloscope<'a> {
     // maintains arrays of recent scope data, culled to ``region`` and converted to floating pt
     pub chA_buff_float: Vec<f32>,
     pub chB_buff_float: Vec<f32>,
+    // arrays of a FULL waveform, as the raw u32, for caching a waveform to send over a socket
+    pub chA_last_waveform: Vec<u32>,
+    pub chB_last_waveform: Vec<u32>,
     region: ScopeRegion,
     _resource: &'a mut resources::ScopeResource,
 }
@@ -64,6 +67,8 @@ impl<'a> Oscilloscope<'a> {
             chB_buff_raw: unsafe { core::rp_jmd_AcqGetRawBuffer(1) },
             chA_buff_float: Vec::with_capacity(16384),
             chB_buff_float: Vec::with_capacity(16384),
+            chA_last_waveform: Vec::with_capacity(16384),
+            chB_last_waveform: Vec::with_capacity(16384),
             region: ScopeRegion {
                 skip_start: 0,
                 skip_end: 0,
@@ -237,24 +242,55 @@ impl<'a> Oscilloscope<'a> {
     /// Panics if the RP API returns a catastrophically wrong value
     pub fn update_scope_data_both(&mut self) -> APIResult<()> {
         let index = self.get_write_index_at_trigger()?;
-        let mut ret_a = Vec::with_capacity(self.region.num_points);
-        let mut ret_b = Vec::with_capacity(self.region.num_points);
         for i in (self.region.skip_start..(16384 - self.region.skip_end))
             .step_by(self.region.skip_rate as usize)
         {
-            ret_a.push(unsafe {
+            self.chA_buff_float[i as usize] = unsafe {
+                read_volatile(
+                    self.chA_buff_raw
+                        .offset((index.wrapping_add(i)) as isize % 16384),
+                ) as f32
+            };
+            self.chB_buff_float[i as usize] = unsafe {
+                read_volatile(
+                    self.chA_buff_raw
+                        .offset((index.wrapping_add(i)) as isize % 16384),
+                ) as f32
+            };
+        }
+        Ok(())
+    }
+
+    /// updates the ``Oscilloscope``'s internal buffers with most recent raw scope waveform.
+    /// This version does not cull data down to the region of interest, and is intended to be
+    /// used to send the full scope trace to an external monitoring program.
+    /// # Errors
+    /// If an RP API call returns a failure code, this returns Err containing the failure.
+    /// In case of an error, the state of the buffers is unspecified.
+    /// # Panics
+    /// Panics if the RP API returns a catastrophically wrong value
+    pub fn write_raw_waveform(&mut self, chA: &mut Vec<u32>, chB: &mut Vec<u32>) -> APIResult<()> {
+        chA.reserve_exact(16384 - chA.len());
+        chB.reserve_exact(16384 - chB.len());
+        let index = self.get_write_index_at_trigger()?;
+        for i in (self.region.skip_start..(16384 - self.region.skip_end))
+            .step_by(self.region.skip_rate as usize)
+        {
+            chA[i as usize] = unsafe {
                 read_volatile(
                     self.chA_buff_raw
                         .offset((index.wrapping_add(i)) as isize % 16384),
                 )
-            });
-            ret_b.push(unsafe {
+            };
+            chB[i as usize] = unsafe {
                 read_volatile(
-                    self.chB_buff_raw
+                    self.chA_buff_raw
                         .offset((index.wrapping_add(i)) as isize % 16384),
                 )
-            });
+            };
         }
+        chA.truncate(16384);
+        chB.truncate(16384);
         Ok(())
     }
 

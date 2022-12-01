@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 #![allow(non_snake_case)]
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Debug, Default)]
@@ -117,5 +118,66 @@ impl Servo {
     }
     pub fn error_feedback(&self) -> f32 {
         self.error_feedback
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct LockSerialize {
+    gain_P: f32,
+    gain_I: f32,
+    gain_D: f32,
+    alpha_I: f32,
+
+    // approx. time between samples. In effect, the actual integral gain is
+    // <gain_I * sample_time_sec> and actual derivative gain is
+    // <gain_D / sample_time_sec>. There's no functional difference, but this
+    // scheme is a bit more consistent with standard PID tuning methods like Ziegler-Nichols.
+    sample_time_sec: Option<f32>,
+
+    max_feedback_step_size: f32,
+    max_feedback_value: f32,
+    min_feedback_value: f32,
+}
+
+impl LockSerialize {
+    fn into_servo(self) -> Servo {
+        let mut out = Servo::new();
+        out.gain_P = self.gain_P;
+        out.gain_I = self.gain_I;
+        out.gain_D = self.gain_D;
+        out.set_alpha_I(self.alpha_I);
+        out.sample_time_sec = self.sample_time_sec;
+        out.max_feedback_step_size = self.max_feedback_step_size;
+        out.max_feedback_value = self.max_feedback_value;
+        out.min_feedback_value = self.min_feedback_value;
+        out
+    }
+
+    fn from_servo(lock: &Servo) -> Self {
+        LockSerialize {
+            gain_P: lock.gain_P,
+            gain_I: lock.gain_I,
+            gain_D: lock.gain_D,
+            alpha_I: lock.alpha_I(),
+            sample_time_sec: lock.sample_time_sec,
+            max_feedback_step_size: lock.max_feedback_step_size,
+            max_feedback_value: lock.max_feedback_value,
+            min_feedback_value: lock.min_feedback_value,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Servo {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(LockSerialize::deserialize(d)?.into_servo())
+    }
+}
+
+impl Serialize for Servo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        LockSerialize::from_servo(self).serialize(serializer)
     }
 }

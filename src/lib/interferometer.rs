@@ -2,6 +2,8 @@
 
 use std::str::Split;
 
+use librp_sys::oscilloscope::Oscilloscope;
+
 use super::laser::Laser;
 use super::lock::Servo;
 use super::ramp::Ramp;
@@ -18,6 +20,8 @@ pub struct Interferometer {
 
     pub ramp_setup: Ramp,
     pub cycle_counter: u64,
+    pub last_waveform_chA: Vec<u32>,
+    pub last_waveform_chB: Vec<u32>,
 }
 
 impl Interferometer {
@@ -32,6 +36,8 @@ impl Interferometer {
 
             ramp_setup: Ramp::new(),
             cycle_counter: 0,
+            last_waveform_chA: Vec::with_capacity(16384),
+            last_waveform_chB: Vec::with_capacity(16384),
         })
     }
 
@@ -51,8 +57,14 @@ impl Interferometer {
         self.slave_lock.reset_integral();
     }
 
+    pub fn update_last_waveforms(&mut self, osc: &mut Oscilloscope) {
+        let _ = osc.write_raw_waveform(&mut self.last_waveform_chA, &mut self.last_waveform_chB);
+    }
+
     #[allow(clippy::too_many_lines)]
     pub fn process_command(&mut self, cmd: Split<'_, char>) -> Result<Option<String>, ()> {
+        //TODO: refactor to use next() rather than collect, then pass the rest of the split down
+        // to methods for each of this interferometer's children.
         let cmds_split: Vec<&str> = cmd.collect();
         match &cmds_split[..] {
             // -----------------------------------------------------------------------------

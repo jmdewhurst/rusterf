@@ -4,10 +4,10 @@ use core::cmp::min;
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct CircleBuffer2n<T: Copy + Default> {
-    data: Vec<T>,
     n: usize,
     len: usize,
     posn: usize,
+    data: Vec<T>,
 }
 
 impl<T: Copy + Default> CircleBuffer2n<T> {
