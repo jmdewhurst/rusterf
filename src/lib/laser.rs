@@ -65,14 +65,9 @@ impl Laser {
     }
 
     pub fn resize_logs(&mut self, n_new: usize) -> Result<(), ()> {
-        let opt_phase = CircleBuffer2n::new(n_new);
-        let opt_feedback = CircleBuffer2n::new(n_new);
-        if !(opt_phase.is_some() && opt_feedback.is_some()) {
-            return Err(());
-        };
-        let mut new_phase = opt_phase.unwrap();
+        let mut new_phase = CircleBuffer2n::new(n_new).ok_or(())?;
+        let mut new_feedback = CircleBuffer2n::new(n_new).ok_or(())?;
         new_phase.extend(&self.phase_log);
-        let mut new_feedback = opt_feedback.unwrap();
         new_feedback.extend(&self.feedback_log);
         self.phase_log = new_phase;
         self.feedback_log = new_feedback;

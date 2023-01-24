@@ -2,12 +2,12 @@
 #ifndef _SINUSOID_FITTING_H
 #define _SINUSOID_FITTING_H
 
-#include <gsl/gsl_blas.h>
-#include <gsl/gsl_matrix.h>
-#include <gsl/gsl_multifit_nlinear.h>
-#include <gsl/gsl_randist.h>
-#include <gsl/gsl_rng.h>
-#include <gsl/gsl_vector.h>
+#include "gsl/gsl_blas.h"
+#include "gsl/gsl_matrix.h"
+#include "gsl/gsl_multifit_nlinear.h"
+#include "gsl/gsl_randist.h"
+#include "gsl/gsl_rng.h"
+#include "gsl/gsl_vector.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -25,6 +25,7 @@ typedef struct {
 
 typedef struct {
   int gsl_status;
+  int niter;
   float params[4];
 } multifit_result_raw_t;
 

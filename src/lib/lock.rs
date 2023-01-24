@@ -6,9 +6,9 @@ use std::fmt;
 
 #[derive(Debug, Default)]
 pub enum Mode {
-    Enabled,
     #[default]
     Disabled,
+    Enabled,
 }
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

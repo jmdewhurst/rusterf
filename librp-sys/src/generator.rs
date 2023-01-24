@@ -326,6 +326,8 @@ impl<'a> PulseChannel<'a> {
         ampl_volts: f32,
     ) -> APIResult<Self> {
         let last_value = waveform[waveform.len() - 1];
+        ch.set_waveform_type(WaveformType::Arbitrary)?;
+        ch.set_arb_waveform(&mut waveform)?;
         ch.set_single_pulse_mode(&mut waveform as &mut [f32])?;
         ch.set_offset(0.)?;
         ch.set_burst_last_value(last_value * ampl_volts)?;
@@ -351,6 +353,15 @@ impl<'a> PulseChannel<'a> {
     /// Panics if the RP API returns a catastrophically wrong value
     pub fn disable(&mut self) -> APIResult<()> {
         self.ch.disable()
+    }
+
+    /// # Errors
+    /// If an RP API call returns a failure code, this returns Err containing the failure.
+    /// # Panics
+    /// Panics if the RP API returns a catastrophically wrong value
+    pub fn set_waveform(&mut self, waveform: &mut [f32]) -> APIResult<()> {
+        self.ch.disable()?;
+        self.ch.set_arb_waveform(waveform)
     }
     /// # Errors
     /// If an RP API call returns a failure code, this returns Err containing the failure.

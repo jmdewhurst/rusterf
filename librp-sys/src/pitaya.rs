@@ -9,6 +9,7 @@ use std::process::Command;
 
 use crate::resources;
 
+#[derive(Debug)]
 pub enum InitializationError {
     FAILED_TO_LOAD_FPGA_IMAGE,
     API_FAILED(rp::APIError),

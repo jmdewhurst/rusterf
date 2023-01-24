@@ -9,3 +9,5 @@ pub mod oscilloscope;
 pub mod pitaya;
 
 mod resources;
+
+pub use pitaya::Pitaya;

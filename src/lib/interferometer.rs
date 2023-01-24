@@ -2,11 +2,12 @@
 
 use std::str::Split;
 
+use librp_sys::core::{APIResult, Channel};
 use librp_sys::oscilloscope::Oscilloscope;
 
 use super::laser::Laser;
 use super::lock::Servo;
-use super::ramp::Ramp;
+use super::ramp::DaqSetup;
 use crate::multifit;
 
 #[derive(Debug)]
@@ -18,26 +19,26 @@ pub struct Interferometer {
     pub slave_lock: Servo,
     pub fit_setup: multifit::FitSetup,
 
-    pub ramp_setup: Ramp,
+    pub ramp_setup: DaqSetup,
     pub cycle_counter: u64,
-    pub last_waveform_chA: Vec<u32>,
-    pub last_waveform_chB: Vec<u32>,
+    pub last_waveform_ref: Vec<u32>,
+    pub last_waveform_slave: Vec<u32>,
 }
 
 impl Interferometer {
     pub fn new() -> Option<Self> {
         Some(Interferometer {
             is_master: true,
-            ref_laser: Laser::new(14)?,
+            ref_laser: Laser::new(12)?,
             ref_lock: Servo::new(),
-            slave_laser: Laser::new(14)?,
+            slave_laser: Laser::new(12)?,
             slave_lock: Servo::new(),
             fit_setup: multifit::FitSetup::init(1, 16384, 16, 1e-6, 1e-6, 1e-6, 3.0)?,
 
-            ramp_setup: Ramp::new(),
+            ramp_setup: DaqSetup::new(),
             cycle_counter: 0,
-            last_waveform_chA: Vec::with_capacity(16384),
-            last_waveform_chB: Vec::with_capacity(16384),
+            last_waveform_ref: Vec::with_capacity(16384),
+            last_waveform_slave: Vec::with_capacity(16384),
         })
     }
 
@@ -57,8 +58,16 @@ impl Interferometer {
         self.slave_lock.reset_integral();
     }
 
-    pub fn update_last_waveforms(&mut self, osc: &mut Oscilloscope) {
-        let _ = osc.write_raw_waveform(&mut self.last_waveform_chA, &mut self.last_waveform_chB);
+    pub fn update_last_waveforms(&mut self, osc: &mut Oscilloscope) -> APIResult<()> {
+        match self.ref_laser.input_channel {
+            Channel::CH_1 => {
+                osc.write_raw_waveform(&mut self.last_waveform_ref, &mut self.last_waveform_slave)?;
+            }
+            Channel::CH_2 => {
+                osc.write_raw_waveform(&mut self.last_waveform_slave, &mut self.last_waveform_ref)?;
+            }
+        };
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -71,15 +80,14 @@ impl Interferometer {
             //   Voltage ramp options
             // -----------------------------------------------------------------------------
             ["RAMP", "AMPL", "SET", x] => {
-                self.ramp_setup
-                    .set_amplitude(x.parse::<f32>().map_err(|_| ())?);
+                self.ramp_setup.amplitude(x.parse::<f32>().map_err(|_| ())?);
                 self.update_fringe_params();
                 Ok(None)
             }
             ["RAMP", "AMPL", "GET"] => Ok(Some(self.ramp_setup.amplitude_volts.to_string())),
             ["RAMP", "GAIN", "SET", x] => {
                 self.ramp_setup
-                    .set_preamp_gain(x.parse::<f32>().map_err(|_| ())?);
+                    .preamp_gain(x.parse::<f32>().map_err(|_| ())?);
                 self.update_fringe_params();
                 Ok(None)
             }
@@ -94,7 +102,7 @@ impl Interferometer {
             }
             ["RAMP", "SETTLE_TIME", "SET", x] => {
                 self.ramp_setup
-                    .set_piezo_settle_time(x.parse::<f32>().map_err(|_| ())?);
+                    .piezo_settle_time(x.parse::<f32>().map_err(|_| ())?);
                 Ok(None)
             }
             ["RAMP", "SETTLE_TIME", "GET"] => {

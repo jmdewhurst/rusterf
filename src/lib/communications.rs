@@ -25,14 +25,13 @@ fn vu32_to_u8(v: &[u32]) -> &[u8] {
 }
 
 impl InterfComms {
-    // TODO: eliminate panics?
-    pub fn new(ctx: zmq::Context) -> Self {
-        let logs_sock = ctx.socket(zmq::PUB).unwrap();
-        let command_sock = ctx.socket(zmq::REP).unwrap();
+    pub fn new(ctx: zmq::Context) -> Option<Self> {
+        let logs_sock = ctx.socket(zmq::PUB).ok()?;
+        let command_sock = ctx.socket(zmq::REP).ok()?;
         let msg_incoming = zmq::Message::new();
         // let msg_outgoing = zmq::Message::new();
-        let hostname = gethostname().into_string().unwrap();
-        InterfComms {
+        let hostname = gethostname().into_string().ok()?;
+        Some(InterfComms {
             hostname,
             ctx,
             logs_sock,
@@ -41,26 +40,25 @@ impl InterfComms {
             command_port: 8081,
             msg_incoming,
             outgoing_buffer: Vec::new(),
-        }
+        })
     }
 
     /// Poll the command socket, and handle a command if one is queued up. Returns Some()
     /// containing the text of the message if one was found, or None if polling failed or there
     /// was no message to be processed, or we failed to handle the command.
     pub fn handle_socket_request(&mut self, interf: &mut Interferometer) -> Option<&str> {
+        // TODO: eliminate panic?
         match self.command_sock.poll(zmq::POLLIN, 0) {
             Err(_x) => None,
             Ok(0) => None,
             Ok(_x) => {
-                if self.command_sock.recv(&mut self.msg_incoming, 0).is_ok() {
-                    match interf.process_command(self.msg_incoming.as_str().unwrap().split(':')) {
-                        Ok(None) => self.command_sock.send("", 0).ok()?,
-                        Ok(Some(s)) => self.command_sock.send(&s, 0).ok()?,
-                        Err(_y) => self.command_sock.send("", 0).ok()?,
-                    };
-                    return Some(self.msg_incoming.as_str().unwrap());
-                }
-                None
+                self.command_sock.recv(&mut self.msg_incoming, 0).ok()?;
+                match interf.process_command(self.msg_incoming.as_str().unwrap().split(':')) {
+                    Ok(None) => self.command_sock.send("", 0).ok()?,
+                    Ok(Some(s)) => self.command_sock.send(&s, 0).ok()?,
+                    Err(_y) => self.command_sock.send("", 0).ok()?,
+                };
+                return Some(self.msg_incoming.as_str().unwrap());
             }
         }
     }
@@ -94,10 +92,11 @@ impl InterfComms {
         self.logs_sock
             .send(vf_to_u8(&self.outgoing_buffer), zmq::SNDMORE)?;
 
+        todo!("change to pulling these waveforms directly from oscilloscope?");
         self.logs_sock
-            .send(vu32_to_u8(&interf.last_waveform_chA), zmq::SNDMORE)?;
+            .send(vu32_to_u8(&interf.last_waveform_ref), zmq::SNDMORE)?;
         self.logs_sock
-            .send(vu32_to_u8(&interf.last_waveform_chB), zmq::SNDMORE)?;
+            .send(vu32_to_u8(&interf.last_waveform_slave), zmq::SNDMORE)?;
 
         self.logs_sock
             .send(vf_to_u8(&interf.ref_laser.fit_coefficients), zmq::SNDMORE)?;
@@ -137,7 +136,7 @@ impl CommsSerialize {
     fn into_interf_comms(self) -> Option<InterfComms> {
         if gethostname().into_string().ok()? == self.hostname {
             let ctx = zmq::Context::new();
-            let mut comms = InterfComms::new(ctx);
+            let mut comms = InterfComms::new(ctx)?;
             comms.bind_sockets(self.logs_port, self.command_port).ok()?;
             return Some(comms);
         }
@@ -154,7 +153,7 @@ impl CommsSerialize {
 }
 
 impl<'de> Deserialize<'de> for InterfComms {
-    // TODO: handle error case properly, rather than just unwrapping
+    // TODO: eliminate panic?
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         Ok(CommsSerialize::deserialize(d)?.into_interf_comms().unwrap())
     }

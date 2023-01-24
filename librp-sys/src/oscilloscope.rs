@@ -11,6 +11,9 @@ use enum_primitive::*;
 use std::mem::MaybeUninit;
 use std::ptr::read_volatile;
 
+// Red pitaya samples at 125 MHz
+pub const BASE_SAMPLE_RATE: f32 = 125_000_000.0;
+
 enum_from_primitive! {
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -197,6 +200,8 @@ impl<'a> Oscilloscope<'a> {
         }
     }
 
+    /// Returns a pair of vectors containing the most recent scope data (as u32) culled to
+    /// `self`'s configured ROI. NOTE: allocates a pair of vectors
     /// # Errors
     /// If an RP API call returns a failure code, this returns Err containing the failure.
     /// # Panics
@@ -211,7 +216,6 @@ impl<'a> Oscilloscope<'a> {
         // do a single read from the FPGA registers of the data we need, and then we can cache
         // those vectors while we do math on them.
         let index = self.get_write_index_at_trigger()?;
-        // TODO: vec exact capacity?
         let mut ret_a = Vec::with_capacity(self.region.num_points);
         let mut ret_b = Vec::with_capacity(self.region.num_points);
         for i in (self.region.skip_start..(16384 - self.region.skip_end))
@@ -233,8 +237,8 @@ impl<'a> Oscilloscope<'a> {
         Ok((ret_a, ret_b))
     }
 
-    /// updates the ``Oscilloscope``'s internal buffers with most recent scope data.
-    /// Provided as an alternative to ``get_scope_data_both`` that avoids heap allocation.
+    /// updates the `Oscilloscope`'s internal buffers with most recent scope data.
+    /// Provided as an alternative to `get_scope_data_both` that avoids heap allocation.
     /// # Errors
     /// If an RP API call returns a failure code, this returns Err containing the failure.
     /// In case of an error, the state of the buffers is unspecified.
@@ -261,7 +265,8 @@ impl<'a> Oscilloscope<'a> {
         Ok(())
     }
 
-    /// updates the ``Oscilloscope``'s internal buffers with most recent raw scope waveform.
+    /// Writes the most recent raw scope waveform into a pair of user-provided vectors. Vectors
+    /// are user-provided so that the user can avoid unnecessary heap allocations.
     /// This version does not cull data down to the region of interest, and is intended to be
     /// used to send the full scope trace to an external monitoring program.
     /// # Errors
@@ -273,9 +278,7 @@ impl<'a> Oscilloscope<'a> {
         chA.reserve_exact(16384 - chA.len());
         chB.reserve_exact(16384 - chB.len());
         let index = self.get_write_index_at_trigger()?;
-        for i in (self.region.skip_start..(16384 - self.region.skip_end))
-            .step_by(self.region.skip_rate as usize)
-        {
+        for i in 0..16384 {
             chA[i as usize] = unsafe {
                 read_volatile(
                     self.chA_buff_raw

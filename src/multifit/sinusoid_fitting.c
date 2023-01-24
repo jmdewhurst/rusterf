@@ -1,5 +1,6 @@
 
 #include "sinusoid_fitting.h"
+#include <gsl/gsl_errno.h>
 
 int sinusoid(const gsl_vector *x, void *params, gsl_vector *f) {
   multifit_data_t *data = (multifit_data_t *)params;
@@ -14,7 +15,7 @@ int sinusoid(const gsl_vector *x, void *params, gsl_vector *f) {
 
   float skipped_freq = freq * skip_rate;
 
-  for (int i = 0; i < n; i++) {
+  for (unsigned int i = 0; i < n; i++) {
     FIT_FLOAT_TYPE Yi = A * cos(skipped_freq * i - phi) + offs;
     gsl_vector_set(f, i, Yi - y[i]);
   }
@@ -32,7 +33,7 @@ int sinusoid_df(const gsl_vector *x, void *params, gsl_matrix *J) {
   FIT_FLOAT_TYPE phi = gsl_vector_get(x, 2);
 
   float skipped_freq = freq * skip_rate;
-  for (int i = 0; i < n; i++) {
+  for (unsigned int i = 0; i < n; i++) {
     /* Jacobian matrix J(i,j) = dfi / dxj, */
     /* where fi = (Yi - yi),      */
     /*       Yi = A * cos(freq*ti + phi) + offs  */
@@ -61,7 +62,7 @@ int sinusoid_fvv(const gsl_vector *x, const gsl_vector *v, void *params,
 
   float skipped_freq = b * skip_rate;
 
-  for (int i = 0; i < n; i++) {
+  for (unsigned int i = 0; i < n; i++) {
     FIT_FLOAT_TYPE cos_part = cos(skipped_freq * i - c);
     FIT_FLOAT_TYPE sin_part = sin(skipped_freq * i - c);
 
@@ -87,6 +88,7 @@ multifit_result_raw_t do_fitting(multifit_setup_t *setup,
   }
   int info;
   multifit_result_raw_t result;
+	setup->fdf->params = &data;
   gsl_multifit_nlinear_init(setup->guess, setup->fdf, setup->work);
   int status = gsl_multifit_nlinear_driver(setup->max_iterations, setup->xtol,
                                            setup->gtol, setup->ftol, NULL, NULL,
@@ -96,6 +98,7 @@ multifit_result_raw_t do_fitting(multifit_setup_t *setup,
     result.params[i] = gsl_vector_get(coef, i);
   }
   result.gsl_status = status;
+	result.niter = gsl_multifit_nlinear_niter(setup->work);
   return result;
 }
 
