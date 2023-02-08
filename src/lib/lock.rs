@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::str::Split;
 
 #[derive(Debug, Default)]
 pub enum Mode {
@@ -38,11 +39,10 @@ pub struct Servo {
     pub mode: Mode,
 
     pub max_feedback_step_size: f32,
-    pub max_feedback_value: f32,
-    pub min_feedback_value: f32,
 }
 
 impl Servo {
+    #[must_use]
     pub fn new() -> Self {
         Servo {
             ..Default::default()
@@ -55,26 +55,20 @@ impl Servo {
         } else {
             new_error
         };
-        let adjustment = self
+        let out = self
             .pid_core(err)
             .clamp(-self.max_feedback_step_size, self.max_feedback_step_size);
-        self.error_feedback = (self.error_feedback + adjustment)
-            .clamp(self.min_feedback_value, self.max_feedback_step_size);
-        self.error_feedback
+        self.last_error = err;
+        out
     }
 
     fn pid_core(&mut self, err: f32) -> f32 {
         match self.mode {
             Mode::Enabled => {
                 self.integral *= self.alpha_I;
-                let deriv_term;
-                if let Some(x) = self.sample_time_sec {
-                    self.integral += err * x;
-                    deriv_term = self.gain_D * (err - self.last_error) / x;
-                } else {
-                    self.integral += err;
-                    deriv_term = self.gain_D * (err - self.last_error);
-                }
+                self.integral += err * self.sample_time_sec.unwrap_or(1.0);
+                let deriv_term =
+                    self.gain_D * (err - self.last_error) / self.sample_time_sec.unwrap_or(1.0);
                 let integral_term = self.gain_I * self.integral;
                 err * self.gain_P + deriv_term + integral_term
             }
@@ -82,12 +76,20 @@ impl Servo {
         }
     }
 
+    #[inline]
     pub fn enable(&mut self) {
         self.mode = Mode::Enabled;
     }
 
+    #[inline]
     pub fn disable(&mut self) {
         self.mode = Mode::Disabled;
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn last_error(&self) -> f32 {
+        self.last_error
     }
 
     pub fn set_alpha_I(&mut self, new_alpha: f32) {
@@ -98,14 +100,18 @@ impl Servo {
         };
     }
 
+    #[must_use]
+    #[inline]
     pub fn alpha_I(&self) -> f32 {
         self.alpha_I
     }
 
+    #[inline]
     pub fn reset_integral(&mut self) {
         self.integral = 0.0;
     }
 
+    #[inline]
     pub fn set_setpoint(&mut self, new_setpoint: f32) {
         if !new_setpoint.is_nan() {
             self.setpoint = new_setpoint;
@@ -113,11 +119,60 @@ impl Servo {
         self.integral = 0.0;
     }
 
+    #[must_use]
+    #[inline]
     pub fn setpoint(&self) -> f32 {
         self.setpoint
     }
+    #[must_use]
+    #[inline]
     pub fn error_feedback(&self) -> f32 {
         self.error_feedback
+    }
+    pub fn process_command(&mut self, cmd: Split<'_, char>) -> Result<Option<String>, ()> {
+        match cmd.collect::<Vec<&str>>()[..] {
+            ["GAIN_P", "SET", x] => {
+                self.gain_P = x.parse::<f32>().map_err(|_| ())?;
+                Ok(None)
+            }
+            ["GAIN_P", "GET"] => Ok(Some(self.gain_P.to_string())),
+            ["GAIN_I", "SET", x] => {
+                self.gain_I = x.parse::<f32>().map_err(|_| ())?;
+                self.reset_integral();
+                Ok(None)
+            }
+            ["GAIN_I", "GET"] => Ok(Some(self.gain_I.to_string())),
+            ["GAIN_D", "SET", x] => {
+                self.gain_D = x.parse::<f32>().map_err(|_| ())?;
+                Ok(None)
+            }
+            ["GAIN_D", "GET"] => Ok(Some(self.gain_D.to_string())),
+            ["ALPHA_I", "SET", x] => {
+                self.set_alpha_I(x.parse::<f32>().map_err(|_| ())?);
+                Ok(None)
+            }
+            ["ALPHA_I", "GET"] => Ok(Some(self.alpha_I().to_string())),
+            ["SETPOINT", "SET", x] => {
+                self.set_setpoint(x.parse::<f32>().map_err(|_| ())?);
+                Ok(None)
+            }
+            ["SETPOINT", "GET"] => Ok(Some(self.setpoint().to_string())),
+            ["MODE", "SET", "ENABLE"] => {
+                self.enable();
+                Ok(None)
+            }
+            ["MODE", "SET", "DISABLE"] => {
+                self.disable();
+                Ok(None)
+            }
+            ["MODE", "GET"] => Ok(Some(self.mode.to_string())),
+            ["MAX_STEP_SIZE", "SET", x] => {
+                self.max_feedback_step_size = x.parse::<f32>().map_err(|_| ())?;
+                Ok(None)
+            }
+            ["MAX_STEP_SIZE", "GET"] => Ok(Some(self.max_feedback_step_size.to_string())),
+            _ => Err(()),
+        }
     }
 }
 
@@ -135,8 +190,6 @@ struct LockSerialize {
     sample_time_sec: Option<f32>,
 
     max_feedback_step_size: f32,
-    max_feedback_value: f32,
-    min_feedback_value: f32,
 }
 
 impl LockSerialize {
@@ -148,8 +201,6 @@ impl LockSerialize {
         out.set_alpha_I(self.alpha_I);
         out.sample_time_sec = self.sample_time_sec;
         out.max_feedback_step_size = self.max_feedback_step_size;
-        out.max_feedback_value = self.max_feedback_value;
-        out.min_feedback_value = self.min_feedback_value;
         out
     }
 
@@ -161,8 +212,6 @@ impl LockSerialize {
             alpha_I: lock.alpha_I(),
             sample_time_sec: lock.sample_time_sec,
             max_feedback_step_size: lock.max_feedback_step_size,
-            max_feedback_value: lock.max_feedback_value,
-            min_feedback_value: lock.min_feedback_value,
         }
     }
 }

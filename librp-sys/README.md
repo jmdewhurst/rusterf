@@ -21,5 +21,5 @@ These bindings expose four modules to the user:
 
 3. `generator` represents the onboard Arbitrary Waveform Generator. Again, instantiating this will allow the use of the waveform generator, and no two instances should be able to coexist.
 
-4. `dpin` represents the digital IO pins on board, including the LEDs. Again, instantiating this will allow the use of the waveform generator, and no two instances should be able to coexist.
+4. `dpin` represents the digital IO pins on board, including the LEDs. Again, instantiating this will allow the use of the digital IO pins, and no two instances should be able to coexist.
 

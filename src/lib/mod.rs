@@ -3,7 +3,7 @@ extern crate serde;
 extern crate toml;
 extern crate zmq;
 
-mod circle_buffer;
+pub mod circle_buffer;
 pub mod configs;
 pub mod interferometer;
 pub mod laser;

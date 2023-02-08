@@ -7,7 +7,25 @@
 use enum_primitive::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(feature = "no_api"))]
 include!("bindings.rs");
+
+#[cfg(feature = "no_api")]
+include!("mock/mod.rs");
+
+macro_rules! wrap_call {
+    ($call:ident $(, $arg:expr)* $(,)?) => {
+			{match unsafe {
+				APIError::from_i32(core:: $call ($($arg,)* ) )
+					.unwrap_unchecked()
+				} {
+				RP_OK => Ok(()),
+				err => Err(err),
+				}
+			}
+		}
+}
+// pub(crate) use wrap_call;
 
 enum_from_primitive! {
 #[derive(Debug, Copy, Clone)]

@@ -25,6 +25,10 @@ pub fn sinusoid(x: f32, p: [f32; 4]) -> f32 {
     p[0] * (p[1] * x - p[2]).cos() + p[3]
 }
 
+pub fn sinusoid_b(x: f32, p: [f32; 4]) -> f32 {
+    p[0] * (p[2] * x).cos() + p[1] * (p[2] * x).cos() + p[3]
+}
+
 #[derive(Debug)]
 #[repr(C)]
 struct DataRaw {
@@ -71,6 +75,7 @@ pub struct FitSetup {
     pub ftol: c_float,
     pub max_av_ratio: f32,
 }
+unsafe impl Send for FitSetup {}
 
 impl FitSetup {
     pub fn init(
@@ -100,8 +105,68 @@ impl FitSetup {
             _ => None,
         }
     }
-
+    /// Guess should be the coefficients to the function
+    /// A cos(wx - phi) + offset
+    /// Will return coefficients in the same form. If there's no reasonable guess for phi,
+    /// then you may have better results setting the guessed value of A to zero.
+    /// Internally, this function converts those into
+    /// A cos(wx) + B sin(wx) + offset
+    /// From the user's perspective, this should function as if it fit the first function above, but
+    /// the code on the C side MUST use the second function.
+    #[allow(clippy::cast_precision_loss)]
     pub fn fit(&mut self, data: &[f32], guess: [f32; 4]) -> FitResult {
+        assert!(
+            data.len() == self.num_points as usize,
+            "Cannot fit to data of length != configured number of points"
+        );
+        let guess_internal = [
+            guess[0] * guess[2].cos(),
+            guess[0] * guess[2].sin(),
+            guess[1] * self.skip_rate as f32,
+            guess[3],
+        ];
+        let data_struct = DataRaw {
+            num_points: self.num_points,
+            skip_rate: self.skip_rate,
+            y: data.as_ptr(),
+            guess: guess_internal,
+        };
+        let raw_result = unsafe { do_fitting(self as *mut FitSetup, data_struct) };
+        if raw_result.gsl_status != 0 {
+            eprintln!("[{}] fitting error [{}]", Local::now(), unsafe {
+                CStr::from_ptr(gsl_strerror(raw_result.gsl_status))
+                    .to_str()
+                    .expect("the library function gsl_strerror should return a valid C-style string (with static lifetime)")
+            });
+            eprintln!("{} iterations", raw_result.niter);
+        }
+
+        let params = [
+            (raw_result.params[0] * raw_result.params[0]
+                + raw_result.params[1] * raw_result.params[1])
+                .sqrt(),
+            raw_result.params[2] / self.skip_rate as f32,
+            raw_result.params[1].atan2(raw_result.params[0]),
+            raw_result.params[3],
+        ];
+
+        let low_contrast = params[0] < LOW_CONTRAST_THRESHOLD;
+
+        FitResult {
+            gsl_status: raw_result.gsl_status,
+            n_iterations: raw_result.niter as i32,
+            params,
+            low_contrast,
+        }
+    }
+
+    pub fn fit_deprecated(&mut self, data: &[f32], guess: [f32; 4]) -> FitResult {
+        // function configured to fit the function A * cos(w x - phi) + offset
+        // Not as computationally stable as the newer one, but leaving it in for posterity
+        assert!(
+            data.len() == self.num_points as usize,
+            "Cannot fit to data of length != configured number of points"
+        );
         let data_struct = DataRaw {
             num_points: self.num_points,
             skip_rate: self.skip_rate,
@@ -115,7 +180,7 @@ impl FitSetup {
                     .to_str()
                     .expect("the library function gsl_strerror should return a valid C-style string (with static lifetime)")
             });
-            println!("{} iterations", raw_result.niter);
+            eprintln!("{} iterations", raw_result.niter);
         }
 
         // Do some post-processing to ensure that data are in consistent form. These are not necessarily indications of a bad fit
@@ -138,5 +203,144 @@ impl FitSetup {
 impl Drop for FitSetup {
     fn drop(&mut self) {
         unsafe { release_multifit_resources(self as *mut FitSetup) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::Rng;
+
+    use super::*;
+
+    #[test]
+    fn basic() {
+        let num_points = 1000;
+        let mut rng = rand::thread_rng();
+        let mut setup = FitSetup::init(1, num_points, 32, 1.0e-8, 1.0e-8, 1.0e-8, 1.5).unwrap();
+        let mut data = Vec::new();
+        let center = [1000.0, 0.02, 0.0, 2000.0];
+
+        for _ in 0..100 {
+            let actual = [
+                center[0] * rng.gen_range(0.8..1.2),
+                center[1] * rng.gen_range(0.9..1.1),
+                rng.gen_range(-PI..PI),
+                center[3] + rng.gen_range(-100.0..100.0),
+            ];
+            data.clear();
+            data.extend((0..num_points).map(|x| sinusoid(x as f32, actual)));
+
+            let res = setup.fit(data.as_slice(), center);
+            assert!((res.params[0] - actual[0]).abs() < 1.0);
+            assert!((res.params[1] - actual[1]).abs() / actual[1] < 0.001);
+            assert!((res.params[2] - actual[2]).abs() < 0.001);
+            assert!((res.params[3] - actual[3]).abs() < 1.0);
+        }
+    }
+
+    #[test]
+    fn skip_rate() {
+        let num_points = 16384;
+        let center = [1000.0, 0.0012, 0.0, 2000.0];
+        let guess = [1001.0, 0.0011, 0.2, 1900.0];
+        let base_data: Vec<f32> = (0..num_points)
+            .map(|x| sinusoid(x as f32, center))
+            .collect();
+        for skip_rate in [1u32, 2, 4, 8, 10, 40, 100, 1000] {
+            let num_points_reduced = (num_points + skip_rate - 1) / skip_rate;
+            let data_reduced: Vec<f32> = base_data
+                .iter()
+                .copied()
+                .step_by(skip_rate as usize)
+                .collect();
+            let mut setup = FitSetup::init(
+                skip_rate,
+                num_points_reduced,
+                32,
+                1.0e-8,
+                1.0e-8,
+                1.0e-8,
+                1.5,
+            )
+            .unwrap();
+            let res = setup.fit(data_reduced.as_slice(), guess);
+            assert!((res.params[0] - center[0]).abs() < 1.0);
+            assert!((res.params[1] - center[1]).abs() / center[1] < 0.001);
+            assert!((res.params[2] - center[2]).abs() < 0.001);
+            assert!((res.params[3] - center[3]).abs() < 1.0);
+        }
+    }
+
+    #[test]
+    fn iterations() {
+        let num_points = 1000;
+        let mut rng = rand::thread_rng();
+        let mut setup = FitSetup::init(1, num_points, 32, 1.0e-8, 1.0e-8, 1.0e-8, 1.5).unwrap();
+        let mut data = Vec::new();
+        let center = [1000.0, 0.02, 0.0, 2000.0];
+
+        for _ in 0..100 {
+            let actual = [
+                center[0] * rng.gen_range(0.8..1.2),
+                center[1] * rng.gen_range(0.9..1.1),
+                rng.gen_range(-PI..PI),
+                center[3] + rng.gen_range(-100.0..100.0),
+            ];
+            data.clear();
+            data.extend((0..num_points).map(|x| sinusoid(x as f32, actual)));
+
+            let res = setup.fit(data.as_slice(), center);
+            assert!((res.params[0] - actual[0]).abs() < 1.0);
+            assert!((res.params[1] - actual[1]).abs() / actual[1] < 0.001);
+            assert!((res.params[2] - actual[2]).abs() < 0.001);
+            assert!((res.params[3] - actual[3]).abs() < 1.0);
+            assert!(res.n_iterations < 16);
+        }
+    }
+
+    #[test]
+    fn stability() {
+        let num_points = 100;
+        let num_trials = 10_000;
+        let mut rng = rand::thread_rng();
+        let mut setup = FitSetup::init(1, num_points, 32, 1.0e-8, 1.0e-8, 1.0e-8, 1.5).unwrap();
+        let mut data = Vec::new();
+        let center = [1000.0, 0.2, 0.0, 2000.0];
+
+        let mut num_failures = 0;
+        for i in 0..num_trials {
+            let actual = [
+                center[0] * rng.gen_range(0.2..1.5),
+                center[1] * rng.gen_range(0.8..1.25),
+                rng.gen_range(-PI..PI),
+                center[3] + rng.gen_range(-1000.0..1000.0),
+            ];
+            data.clear();
+            data.extend((0..num_points).map(|x| sinusoid(x as f32, actual)));
+
+            let res = setup.fit(data.as_slice(), [0.0, center[1], 0.0, 0.0]);
+            if ((res.params[0] - actual[0]).abs() > 1.0)
+                || ((res.params[1] - actual[1]).abs() / actual[1] > 0.001)
+                || ((res.params[2] - actual[2]).abs() > 0.001)
+                || ((res.params[3] - actual[3]).abs() > 1.0)
+            {
+                println!("failure at iteration {}:", i);
+                println!("fitting {:?}\nresults {:?}", actual, res.params);
+                println!("guess {:?}", center);
+                num_failures += 1;
+            }
+
+            if num_failures > 5 {
+                println!(
+                    "failed {} times in {} attempts, exceeding threshold of {}",
+                    num_failures, num_trials, 5
+                );
+                panic!();
+            }
+            // assert!((res.params[0] - actual[0]).abs() < 1.0);
+            // assert!((res.params[1] - actual[1]).abs() / actual[1] < 0.001);
+            // assert!((res.params[2] - actual[2]).abs() < 0.001);
+            // assert!((res.params[3] - actual[3]).abs() < 1.0);
+        }
     }
 }

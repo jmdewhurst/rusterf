@@ -1,0 +1,64 @@
+[general]
+number_of_pitayas = 2
+interferometer_FSR_MHz = 430.0
+pitaya_log_length = 2048
+logs_publish_freq_cycles = 512
+debug_list_freq_cycles = 256
+master_external_trigger_output_pin = "DIO6_P"
+ready_to_acquire_pin = "DIO7_P"
+
+logs_port = 8080
+command_port = 8081
+
+[ramp]
+piezo_scale_factor = 3474.9457343334234
+piezo_settle_time_ms = 1.0e-2 
+amplitude_volts = 1.0
+decimation_factor = 16
+
+[multifit]
+samples_skip_start = 6500
+samples_skip_end = 10
+skip_rate = 40
+max_iterations = 256
+xtol = 1.0e-6
+gtol = 1.0e-8
+ftol = 1.0e-8
+max_av_ratio = 10.0
+low_contrast_threshold = 100.0
+
+[ref_laser]
+wavelength_nm = 1550.0
+gain_p = 0.001
+gain_i = 0.003
+gain_d = 0.0
+integral_decay_rate = 0.85
+feedback_max_step_size_v = 0.01
+
+[las_1114]
+wavelength_nm = 1114.0
+gain_p = 0.001
+gain_i = 0.003
+gain_d = 0.0
+integral_decay_rate = 0.85
+feedback_max_step_size_v = 0.01
+
+[jmdsp7-arch]
+is_master = true
+slave_laser = "las_1114"
+ref_input_channel = "CH_1"
+ref_output_channel = "CH_1"
+slave_input_channel = "CH_2"
+slave_output_channel = "CH_2"
+
+ch_1_out_hardware_offset_volts = 1.0
+ch_1_min_output_v = 0.0
+ch_1_max_output_v = 5.0
+ch_1_preamp_gain = 2.5
+
+ch_2_out_hardware_offset_volts = 1.0
+ch_2_min_output_v = 0.0
+ch_2_max_output_v = 5.0
+ch_2_preamp_gain = 2.5
+
+

@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define FIT_FLOAT_TYPE float
+typedef double FIT_FLOAT_TYPE;
 
 typedef struct {
   uint32_t num_points;
@@ -47,6 +47,10 @@ int sinusoid(const gsl_vector *x, void *params, gsl_vector *f);
 int sinusoid_df(const gsl_vector *x, void *params, gsl_matrix *J);
 int sinusoid_fvv(const gsl_vector *x, const gsl_vector *v, void *params,
                  gsl_vector *fvv);
+int sinusoid_b(const gsl_vector *x, void *params, gsl_vector *f);
+int sinusoid_df_b(const gsl_vector *x, void *params, gsl_matrix *J);
+int sinusoid_fvv_b(const gsl_vector *x, const gsl_vector *v, void *params,
+                   gsl_vector *fvv);
 
 uint32_t init_multifit_setup(multifit_setup_t *setup);
 void release_multifit_resources(multifit_setup_t *setup);

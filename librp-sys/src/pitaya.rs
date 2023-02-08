@@ -4,10 +4,11 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::all)]
 use crate::core as rp;
-use enum_primitive::FromPrimitive;
-use std::process::Command;
+use crate::dpin::DigitalPin;
+use crate::generator::Generator;
+use crate::oscilloscope::Oscilloscope;
 
-use crate::resources;
+use std::process::Command;
 
 #[derive(Debug)]
 pub enum InitializationError {
@@ -16,9 +17,9 @@ pub enum InitializationError {
 }
 
 pub struct Pitaya {
-    pub(crate) scope_resource: resources::ScopeResource,
-    pub(crate) generator_resource: resources::GeneratorResource,
-    pub(crate) dpin_resource: resources::DPinResource,
+    pub scope: Oscilloscope,
+    pub gen: Generator,
+    pub dpin: DigitalPin,
 }
 
 impl Pitaya {
@@ -29,32 +30,39 @@ impl Pitaya {
     /// variants indicating the mode of failure.
     /// # Panics
     /// Panics if the RP API returns a catastrophically wrong value
+    #[cfg(not(feature = "no_api"))]
     pub fn init() -> Result<Self, InitializationError> {
-        match Command::new("sh")
+        use enum_primitive::FromPrimitive;
+
+        let status = Command::new("sh")
             // ensure the FPGA image is loaded onto the Red Pitaya -- otherwise the API is nonsense
             .arg("cat /opt/redpitaya/fpga/fpga_0.94.bit > /dev/xdevcfg")
             .status()
-        {
-            Ok(status) => {
-                if !status.success() {
-                    return Err(InitializationError::FAILED_TO_LOAD_FPGA_IMAGE);
-                }
-            }
-            Err(_) => return Err(InitializationError::FAILED_TO_LOAD_FPGA_IMAGE),
+            .map_err(|_| InitializationError::FAILED_TO_LOAD_FPGA_IMAGE)?;
+        if !status.success() {
+            return Err(InitializationError::FAILED_TO_LOAD_FPGA_IMAGE);
         }
 
-        if let Some(errcode) = rp::APIError::from_i32(unsafe { rp::rp_InitReset(true) }) {
-            match errcode {
-                rp::APIError::RP_OK => Ok(Pitaya {
-                    scope_resource: resources::ScopeResource {},
-                    generator_resource: resources::GeneratorResource {},
-                    dpin_resource: resources::DPinResource {},
-                }),
-                _ => Err(InitializationError::API_FAILED(errcode)),
-            }
-        } else {
-            panic!("rp_InitReset returned unexpected error code!");
+        match rp::APIError::from_i32(unsafe { rp::rp_InitReset(true) })
+            .expect("rp_InitReset returned unexpected error code!")
+        {
+            rp::APIError::RP_OK => Ok(Pitaya {
+                scope: Oscilloscope::init(),
+                gen: Generator::init(),
+                dpin: DigitalPin::init(),
+            }),
+            err => Err(InitializationError::API_FAILED(err)),
         }
+    }
+
+    #[cfg(feature = "no_api")]
+    pub fn init() -> Result<Self, InitializationError> {
+        rp::core_mock_init();
+        Ok(Pitaya {
+            scope: Oscilloscope::init(),
+            gen: Generator::init(),
+            dpin: DigitalPin::init(),
+        })
     }
 }
 

@@ -1,0 +1,5 @@
+wavelength_nm = 1500.0
+input_channel = "CH_1"
+output_channel = "CH_1"
+output_base_offset = 0.0
+buffer_length_exponent = 4
