@@ -7,10 +7,10 @@
 use enum_primitive::*;
 use serde::{Deserialize, Serialize};
 
-#[cfg(not(feature = "no_api"))]
+#[cfg(not(any(feature = "no_api", feature = "no_api_loud")))]
 include!("bindings.rs");
 
-#[cfg(feature = "no_api")]
+#[cfg(any(feature = "no_api", feature = "no_api_loud"))]
 include!("mock/mod.rs");
 
 macro_rules! wrap_call {

@@ -30,7 +30,7 @@ impl Pitaya {
     /// variants indicating the mode of failure.
     /// # Panics
     /// Panics if the RP API returns a catastrophically wrong value
-    #[cfg(not(feature = "no_api"))]
+    #[cfg(not(any(feature = "no_api", feature = "no_api_loud")))]
     pub fn init() -> Result<Self, InitializationError> {
         use enum_primitive::FromPrimitive;
 
@@ -55,7 +55,7 @@ impl Pitaya {
         }
     }
 
-    #[cfg(feature = "no_api")]
+    #[cfg(any(feature = "no_api", feature = "no_api_loud"))]
     pub fn init() -> Result<Self, InitializationError> {
         rp::core_mock_init();
         Ok(Pitaya {

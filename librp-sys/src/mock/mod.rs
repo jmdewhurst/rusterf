@@ -2,17 +2,19 @@ macro_rules! fn_ok {
     ($call:ident $(, ($arg:ident : $t:ty))* $(,)?) => {
 			#[allow(unused_variables)]
 			pub unsafe fn $call ($($arg : $t, )*) -> ::std::os::raw::c_int {
-				print!(
-					concat!("[{}] ",  stringify!($call), " "),
-					API_START_TIME.elapsed().as_secs_f32()
-				);
-			  $(
+				if cfg!(feature = "no_api_loud"){
 					print!(
-						concat!("(", stringify!($arg), " = {:?})"),
-						$arg
+						concat!("[{}] ",  stringify!($call), " "),
+						API_START_TIME.elapsed().as_secs_f32()
 					);
-				)*
-				println!("");
+					$(
+						print!(
+							concat!("(", stringify!($arg), " = {:?})"),
+							$arg
+						);
+					)*
+					println!("");
+				}
 				APIError::RP_OK as std::os::raw::c_int
 			}
 		}
@@ -88,10 +90,12 @@ fn_ok!(
 fn_ok!(rp_DpinSetState, (pin: rp_dpin_t), (state: rp_pinState_t));
 pub unsafe fn rp_DpinGetState(pin: rp_dpin_t, state: *mut rp_pinState_t) -> ::std::os::raw::c_int {
     *state = 0;
-    println!(
-        "[{}] rp_DpinGetState",
-        API_START_TIME.elapsed().as_secs_f32()
-    );
+    if cfg!(feature = "no_api_loud") {
+        println!(
+            "[{}] rp_DpinGetState",
+            API_START_TIME.elapsed().as_secs_f32()
+        );
+    }
     APIError::RP_OK as ::std::os::raw::c_int
 }
 
@@ -110,18 +114,22 @@ fn_ok!(rp_AcqStop);
 
 pub unsafe fn rp_AcqGetTriggerState(state: *mut rp_acq_trig_state_t) -> ::std::os::raw::c_int {
     *state = 0;
-    println!(
-        "[{}] rp_AcqGetTriggerState",
-        API_START_TIME.elapsed().as_secs_f32()
-    );
+    if cfg!(feature = "no_api_loud") {
+        println!(
+            "[{}] rp_AcqGetTriggerState",
+            API_START_TIME.elapsed().as_secs_f32()
+        );
+    }
     APIError::RP_OK as ::std::os::raw::c_int
 }
 pub unsafe fn rp_AcqGetWritePointerAtTrig(pos: *mut u32) -> ::std::os::raw::c_int {
     *pos = 0;
-    println!(
-        "[{}] rp_AcqGetWritePointerAtTrig",
-        API_START_TIME.elapsed().as_secs_f32()
-    );
+    if cfg!(feature = "no_api_loud") {
+        println!(
+            "[{}] rp_AcqGetWritePointerAtTrig",
+            API_START_TIME.elapsed().as_secs_f32()
+        );
+    }
     APIError::RP_OK as ::std::os::raw::c_int
 }
 

@@ -1,14 +1,14 @@
 // use std::path::Path;
 use std::process::Command;
 
-#[cfg(feature = "no_api")]
+#[cfg(any(feature = "no_api", feature = "no_api_loud"))]
 fn main() {
     println!("cargo:rerun-if-changed=librp-sys/include/rp.c");
     println!("cargo:rerun-if-changed=librp-sys/include/rp.h");
     println!("cargo:rerun-if-changed=build.rs");
 }
 
-#[cfg(not(feature = "no_api"))]
+#[cfg(not(any(feature = "no_api", feature = "no_api_loud")))]
 fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let target = std::env::var("TARGET").unwrap();

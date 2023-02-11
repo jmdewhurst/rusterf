@@ -1,7 +1,8 @@
 #![allow(
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation,
-    clippy::cast_precision_loss
+    clippy::cast_precision_loss,
+    clippy::missing_errors_doc
 )]
 
 use gethostname::gethostname;
@@ -19,87 +20,101 @@ use super::laser::Laser;
 use super::lock::Servo;
 use super::ramp::DaqSetup;
 use super::{communications::InterfComms, interferometer::Interferometer};
-//TODO: Replace arguments of (&str) with (&mut toml::Value)?
 
-// #[allow(clippy::unnecessary_wraps)]
-pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Option<()> {
-    let hostname = gethostname().into_string().ok()?;
-    let hostname = hostname.as_str();
-    gen.ch_a.set_hw_offset_v(
-        cfg.get(hostname)?
-            .get("ch_1_out_hardware_offset_volts")?
-            .as_float()? as f32,
-    );
-    gen.ch_a
-        .set_gain_post(cfg.get(hostname)?.get("ch_1_preamp_gain")?.as_float()? as f32);
-    gen.ch_a.set_output_range(
-        cfg.get(hostname)?.get("ch_1_min_output_v")?.as_float()? as f32,
-        cfg.get(hostname)?.get("ch_1_max_output_v")?.as_float()? as f32,
-    );
-    gen.ch_a
-        .set_offset_v((gen.ch_a.max_output_v() - gen.ch_a.min_output_v()) / 2.0);
-    gen.ch_b.set_hw_offset_v(
-        cfg.get(hostname)?
-            .get("ch_2_out_hardware_offset_volts")?
-            .as_float()? as f32,
-    );
-    gen.ch_b
-        .set_gain_post(cfg.get(hostname)?.get("ch_2_preamp_gain")?.as_float()? as f32);
-    gen.ch_b.set_output_range(
-        cfg.get(hostname)?.get("ch_2_min_output_v")?.as_float()? as f32,
-        cfg.get(hostname)?.get("ch_2_max_output_v")?.as_float()? as f32,
-    );
-    gen.ch_b
-        .set_offset_v((gen.ch_b.max_output_v() - gen.ch_b.min_output_v()) / 2.0);
-    Some(())
-}
-
-#[must_use]
-pub fn dpin_get_ready_pin(cfg: &toml::Value) -> Option<dpin::Pin> {
-    cfg.get("general")?
-        .get("ready_to_acquire_pin")?
-        .as_str()
-        .map(dpin::Pin::from_str)?
-        .ok()
-}
-#[must_use]
-pub fn dpin_get_trigger_pin(cfg: &toml::Value) -> Option<dpin::Pin> {
-    cfg.get("general")?
-        .get("master_external_trigger_output_pin")?
-        .as_str()
-        .map(dpin::Pin::from_str)?
-        .ok()
-}
-
-pub fn dpin_from_config(cfg: &toml::Value, dpin: &mut DigitalPin) -> Option<()> {
-    let hostname = gethostname().into_string().ok()?;
-    let hostname = hostname.as_str();
-    let is_master = cfg.get(hostname)?.get("is_master")?.as_bool()?;
-    if is_master {
-        let trigger_out_pin = cfg
-            .get("general")?
-            .get("master_external_trigger_output_pin")?
-            .as_str()
-            .map(dpin::Pin::from_str)?
-            .ok()?;
-        dpin.set_direction(trigger_out_pin, dpin::PinDirection::Out)
-            .ok()?;
+macro_rules! tomlget {
+    ($cfg:ident, $sec:expr, $key:expr, $conv:ident, $as:ty) => {
+        $cfg.get($sec)
+            .ok_or_else(|| format!("failed to get section {}", $sec))?
+            .get($key)
+            .ok_or_else(|| format!("failed to get key {}:{}", $sec, $key))?
+            .$conv()
+            .ok_or_else(|| format!("failed to convert {}:{} to {}", $sec, $key, stringify!($as)))?
+            as $as
     };
-    let ready_to_acquire_pin = cfg
-        .get("general")?
-        .get("ready_to_acquire_pin")?
-        .as_str()
-        .map(dpin::Pin::from_str)?
-        .ok()?;
+    ($cfg:ident, $sec:expr, $key:expr, as_str) => {
+        $cfg.get($sec)
+            .ok_or_else(|| format!("failed to get section {}", $sec))?
+            .get($key)
+            .ok_or_else(|| format!("failed to get key {}:{}", $sec, $key))?
+            .as_str()
+            .ok_or_else(|| format!("failed to convert {}:{} to string", $sec, $key))?
+    };
+    ($cfg:ident, $sec:expr, $key:expr, as_bool) => {
+        $cfg.get($sec)
+            .ok_or_else(|| format!("failed to get section {}", $sec))?
+            .get($key)
+            .ok_or_else(|| format!("failed to get key {}:{}", $sec, $key))?
+            .as_bool()
+            .ok_or_else(|| format!("failed to convert {}:{} to boolean", $sec, $key))?
+    };
+}
+pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(), String> {
+    let hostname = gethostname()
+        .into_string()
+        .map_err(|_| "failed to get hostname")?;
+    let hostname = hostname.as_str();
+    gen.ch_a.set_hw_offset_v(tomlget!(
+        cfg,
+        hostname,
+        "ch_1_out_hardware_offset_volts",
+        as_float,
+        f32
+    ));
+    gen.ch_a
+        .set_gain_post(tomlget!(cfg, hostname, "ch_1_preamp_gain", as_float, f32));
+    gen.ch_a.set_output_range(
+        tomlget!(cfg, hostname, "ch_1_min_output_v", as_float, f32),
+        tomlget!(cfg, hostname, "ch_1_max_output_v", as_float, f32),
+    );
+    gen.ch_b.set_hw_offset_v(tomlget!(
+        cfg,
+        hostname,
+        "ch_2_out_hardware_offset_volts",
+        as_float,
+        f32
+    ));
+    gen.ch_b
+        .set_gain_post(tomlget!(cfg, hostname, "ch_2_preamp_gain", as_float, f32));
+    gen.ch_b.set_output_range(
+        tomlget!(cfg, hostname, "ch_2_min_output_v", as_float, f32),
+        tomlget!(cfg, hostname, "ch_2_max_output_v", as_float, f32),
+    );
+    Ok(())
+}
+
+pub fn dpin_get_ready_pin(cfg: &toml::Value) -> Result<dpin::Pin, String> {
+    dpin::Pin::from_str(tomlget!(cfg, "general", "ready_to_acquire_pin", as_str))
+        .map_err(|_| "failed to convert to pin".to_string())
+}
+pub fn dpin_get_trigger_pin(cfg: &toml::Value) -> Result<dpin::Pin, String> {
+    dpin::Pin::from_str(tomlget!(
+        cfg,
+        "general",
+        "master_external_trigger_output_pin",
+        as_str
+    ))
+    .map_err(|_| "failed to convert to pin".to_string())
+}
+
+pub fn dpin_from_config(cfg: &toml::Value, dpin: &mut DigitalPin) -> Result<(), String> {
+    let hostname = gethostname()
+        .into_string()
+        .map_err(|_| "failed to get hostname")?;
+    let hostname = hostname.as_str();
+    let is_master = tomlget!(cfg, hostname, "is_master", as_bool);
+    if is_master {
+        dpin.set_direction(dpin_get_trigger_pin(cfg)?, dpin::PinDirection::Out)
+            .expect("RP API call failure");
+    };
     dpin.set_direction(
-        ready_to_acquire_pin,
+        dpin_get_ready_pin(cfg)?,
         if is_master {
             dpin::PinDirection::In
         } else {
             dpin::PinDirection::Out
         },
     )
-    .ok()?;
+    .expect("RP API call failure");
     // set external trigger pin as an input
     // TODO: Check if this is actually necessary? i.e., can it trigger on external even if
     // that pin is set as an output?
@@ -107,53 +122,48 @@ pub fn dpin_from_config(cfg: &toml::Value, dpin: &mut DigitalPin) -> Option<()> 
         librp_sys::dpin::Pin::DIO0_P,
         librp_sys::dpin::PinDirection::In,
     )
-    .ok()?;
-    Some(())
+    .expect("RP API call failure");
+    Ok(())
 }
 
-pub fn scope_from_config(cfg: &toml::Value, scope: &mut Oscilloscope) -> Option<()> {
-    let mfit = &cfg.get("multifit")?;
+pub fn scope_from_config(cfg: &toml::Value, scope: &mut Oscilloscope) -> Result<(), String> {
     scope.set_roi(
-        mfit.get("samples_skip_start")?.as_integer()? as usize,
-        mfit.get("samples_skip_end")?.as_integer()? as usize,
-        mfit.get("skip_rate")?.as_integer()? as usize,
+        tomlget!(cfg, "multifit", "samples_skip_start", as_integer, usize),
+        tomlget!(cfg, "multifit", "samples_skip_end", as_integer, usize),
+        tomlget!(cfg, "multifit", "skip_rate", as_integer, usize),
     );
+    // let mfit = &cfg.get("multifit")?;
+    // scope.set_roi(
+    //     mfit.get("samples_skip_start")?.as_integer()? as usize,
+    //     mfit.get("samples_skip_end")?.as_integer()? as usize,
+    //     mfit.get("skip_rate")?.as_integer()? as usize,
+    // );
     // NOTE: ramp::apply() also sets the decimation, waveform; we may be needlessly duplicating logic here
     scope
-        .set_decimation(cfg.get("ramp")?.get("decimation_factor")?.as_integer()? as u32)
-        .ok()?;
-    scope
-        .set_trigger_source(librp_sys::oscilloscope::TrigSrc::ExtRising)
-        .ok()?;
-    scope.set_trigger_delay(8192).ok()?;
-    scope.start_acquisition().ok()?;
-    Some(())
+        .set_decimation(tomlget!(cfg, "ramp", "decimation_factor", as_integer, u32))
+        .expect("RP API call failure");
+    scope.set_trigger_delay(8192).expect("RP API call failure");
+    scope.start_acquisition().expect("RP API call failure");
+    Ok(())
 }
 
-#[must_use]
-pub fn comms_from_config(cfg: &str, ctx: &zmq::Context) -> Option<InterfComms> {
-    let data: toml::Value = toml::from_str(cfg).ok()?;
-    let mut out = InterfComms::new(ctx)?;
-    let logs_port = data.get("general")?.get("logs_port")?.as_integer()? as u16;
-    let command_port = data.get("general")?.get("command_port")?.as_integer()? as u16;
-    if let Err(x) = out.bind_sockets(logs_port, command_port) {
-        eprintln!(
-            "Error [{}] in binding sockets to ports {}, {}",
-            x, logs_port, command_port
-        );
-        return None;
-    }
-    Some(out)
+pub fn comms_from_config(cfg: &toml::Value, ctx: &zmq::Context) -> Result<InterfComms, String> {
+    let mut out = InterfComms::new(ctx).ok_or("failed to instantiate comms struct")?;
+    out.bind_sockets(
+        tomlget!(cfg, "general", "logs_port", as_integer, u16),
+        tomlget!(cfg, "general", "command_port", as_integer, u16),
+    )
+    .map_err(|e| format!("error [{}] in binding sockets", e))?;
+    Ok(out)
 }
 
-#[must_use]
-pub fn ramp_from_config(cfg: &toml::Value) -> Option<DaqSetup> {
+pub fn ramp_from_config(cfg: &toml::Value) -> Result<DaqSetup, String> {
     let mut out = DaqSetup::new();
-    out.amplitude(cfg.get("ramp")?.get("amplitude_volts")?.as_float()? as f32);
-    out.piezo_settle_time_ms(cfg.get("ramp")?.get("piezo_settle_time_ms")?.as_float()? as f32);
-    out.piezo_scale_factor(cfg.get("ramp")?.get("piezo_scale_factor")?.as_float()? as f32);
+    out.amplitude(tomlget!(cfg, "ramp", "amplitude_volts", as_float, f32));
+    out.piezo_settle_time_ms(tomlget!(cfg, "ramp", "piezo_settle_time_ms", as_float, f32));
+    out.piezo_scale_factor(tomlget!(cfg, "ramp", "piezo_scale_factor", as_float, f32));
+    let dec = tomlget!(cfg, "ramp", "decimation_factor", as_integer, u32);
     let dec_factor;
-    let dec = cfg.get("ramp")?.get("decimation_factor")?.as_integer()? as u32;
     if dec == 1 {
         dec_factor = 1;
     } else if dec < 4 {
@@ -169,7 +179,7 @@ pub fn ramp_from_config(cfg: &toml::Value) -> Option<DaqSetup> {
         eprintln!("Decimation factor specified in config file as {}. Valid decimation factors are 1, 2, 4, 8, or any value between 16 and 65536. Proceeding with decimation factor of {}", dec, dec_factor);
     }
     out.set_decimation(dec_factor);
-    Some(out)
+    Ok(out)
 }
 
 #[must_use]
@@ -204,35 +214,37 @@ fn buff_size_exponent(cfg: &toml::Value) -> usize {
     }
 }
 
-#[must_use]
-pub fn ref_laser_from_config(cfg: &toml::Value) -> Option<Laser> {
-    let hostname = gethostname().into_string().ok()?;
+pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
+    let hostname = gethostname()
+        .into_string()
+        .map_err(|_| "failed to get hostname")?;
     let hostname = hostname.as_str();
-    let is_master = cfg.get(hostname)?.get("is_master")?.as_bool()?;
+    let is_master = tomlget!(cfg, hostname, "is_master", as_bool);
 
     let buffer_size_exponent = buff_size_exponent(cfg);
 
-    let mut out = Laser::new(buffer_size_exponent as usize)?;
+    let mut out =
+        Laser::new(buffer_size_exponent as usize).ok_or("failed to instantiate laser struct")?;
     out.set_wavelength(
-        cfg.get("ref_laser")?.get("wavelength_nm")?.as_float()? as f32,
-        cfg.get("ramp")?.get("piezo_scale_factor")?.as_float()? as f32,
-        cfg.get("ramp")?.get("amplitude_volts")?.as_float()? as f32,
+        tomlget!(cfg, "ref_laser", "wavelength_nm", as_float, f32),
+        tomlget!(cfg, "ramp", "piezo_scale_factor", as_float, f32),
+        tomlget!(cfg, "ramp", "amplitude_volts", as_float, f32),
     );
-    match cfg.get(hostname)?.get("ref_input_channel")?.as_str()? {
+    match tomlget!(cfg, hostname, "ref_input_channel", as_str) {
+        // match cfg.get(hostname)?.get("ref_input_channel")?.as_str()? {
         "CH_1" | "CH_A" => out.input_channel = core::Channel::CH_1,
         "CH_2" | "CH_B" => out.input_channel = core::Channel::CH_2,
         _ => {
-            eprintln!("No valid input channel for reference laser found");
-            return None;
+            return Err("No valid input channel for reference laser found".to_string());
         }
     };
     if is_master {
-        match cfg.get(hostname)?.get("ref_output_channel")?.as_str()? {
+        match tomlget!(cfg, hostname, "ref_output_channel", as_str) {
+            // match cfg.get(hostname)?.get("ref_output_channel")?.as_str()? {
             "CH_1" | "CH_A" => out.output_channel = Some(core::Channel::CH_1),
             "CH_2" | "CH_B" => out.output_channel = Some(core::Channel::CH_2),
             _ => {
-                eprintln!("No valid output channel for reference laser found");
-                return None;
+                return Err("No valid output channel for reference laser found".to_string());
             }
         };
     } else {
@@ -241,125 +253,123 @@ pub fn ref_laser_from_config(cfg: &toml::Value) -> Option<Laser> {
 
     // fill in ``guess'' fit coefficients for the lasers
     out.fit_coefficients = [0.0, out.fringe_freq(), 0.0, 1000.0];
-    Some(out)
+    Ok(out)
 }
-
-#[must_use]
-pub fn slave_laser_from_config(cfg: &toml::Value) -> Option<Laser> {
-    let hostname = gethostname().into_string().ok()?;
+pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
+    let hostname = gethostname()
+        .into_string()
+        .map_err(|_| "failed to get hostname")?;
     let hostname = hostname.as_str();
+    let slave_laser_name = tomlget!(cfg, hostname, "slave_laser", as_str);
     let buffer_size_exponent = buff_size_exponent(cfg);
-    let mut out = Laser::new(buffer_size_exponent as usize)?;
-    let slave_laser_name = cfg.get(hostname)?.get("slave_laser")?.as_str()?;
+
+    let mut out =
+        Laser::new(buffer_size_exponent as usize).ok_or("failed to instantiate laser struct")?;
     out.set_wavelength(
-        cfg.get(slave_laser_name)?
-            .get("wavelength_nm")?
-            .as_float()? as f32,
-        cfg.get("ramp")?.get("piezo_scale_factor")?.as_float()? as f32,
-        cfg.get("ramp")?.get("amplitude_volts")?.as_float()? as f32,
+        tomlget!(cfg, slave_laser_name, "wavelength_nm", as_float, f32),
+        tomlget!(cfg, "ramp", "piezo_scale_factor", as_float, f32),
+        tomlget!(cfg, "ramp", "amplitude_volts", as_float, f32),
     );
-    match cfg.get(hostname)?.get("slave_input_channel")?.as_str()? {
+    match tomlget!(cfg, hostname, "slave_input_channel", as_str) {
+        // match cfg.get(hostname)?.get("ref_input_channel")?.as_str()? {
         "CH_1" | "CH_A" => out.input_channel = core::Channel::CH_1,
         "CH_2" | "CH_B" => out.input_channel = core::Channel::CH_2,
         _ => {
-            eprintln!("No valid input channel for slave laser found");
-            return None;
+            return Err("No valid input channel for reference laser found".to_string());
         }
     };
-    match cfg.get(hostname)?.get("slave_output_channel")?.as_str()? {
+    match tomlget!(cfg, hostname, "slave_output_channel", as_str) {
+        // match cfg.get(hostname)?.get("ref_output_channel")?.as_str()? {
         "CH_1" | "CH_A" => out.output_channel = Some(core::Channel::CH_1),
         "CH_2" | "CH_B" => out.output_channel = Some(core::Channel::CH_2),
         _ => {
-            eprintln!("No valid output channel for slave laser found");
-            return None;
+            return Err("No valid output channel for reference laser found".to_string());
         }
     };
 
     // fill in ``guess'' fit coefficients for the lasers
     out.fit_coefficients = [0.0, out.fringe_freq(), 0.0, 1000.0];
-    Some(out)
+    Ok(out)
 }
 
-#[must_use]
-pub fn ref_lock_from_config(cfg: &toml::Value) -> Option<Servo> {
-    let hostname = gethostname().into_string().ok()?;
+pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
+    let hostname = gethostname()
+        .into_string()
+        .map_err(|_| "failed to get hostname")?;
     let hostname = hostname.as_str();
-    let is_master = cfg.get(hostname)?.get("is_master")?.as_bool()?;
+    let is_master = tomlget!(cfg, hostname, "is_master", as_bool);
     let mut out = Servo::new();
     if is_master {
-        out.gain_P = cfg.get("ref_laser")?.get("gain_p")?.as_float()? as f32;
-        out.gain_I = cfg.get("ref_laser")?.get("gain_i")?.as_float()? as f32;
-        out.gain_D = cfg.get("ref_laser")?.get("gain_d")?.as_float()? as f32;
-        out.set_alpha_I(
-            cfg.get("ref_laser")?
-                .get("integral_decay_rate")?
-                .as_float()? as f32,
-        );
-        out.max_feedback_step_size = cfg
-            .get("ref_laser")?
-            .get("feedback_max_step_size_v")?
-            .as_float()? as f32;
-        println!("alpha");
+        out.gain_P = tomlget!(cfg, "ref_laser", "gain_p", as_float, f32);
+        out.gain_I = tomlget!(cfg, "ref_laser", "gain_i", as_float, f32);
+        out.gain_D = tomlget!(cfg, "ref_laser", "gain_d", as_float, f32);
+        out.set_alpha_I(tomlget!(
+            cfg,
+            "ref_laser",
+            "integral_decay_rate",
+            as_float,
+            f32
+        ));
+        out.max_feedback_step_size =
+            tomlget!(cfg, "ref_laser", "feedback_max_step_size_v", as_float, f32);
     }
-    Some(out)
+    Ok(out)
 }
-#[must_use]
-pub fn slave_lock_from_config(cfg: &toml::Value) -> Option<Servo> {
-    let hostname = gethostname().into_string().ok()?;
+pub fn slave_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
+    let hostname = gethostname()
+        .into_string()
+        .map_err(|_| "failed to get hostname")?;
     let hostname = hostname.as_str();
-    let slave_laser_name = cfg.get(hostname)?.get("slave_laser")?.as_str()?;
+    let slave_laser_name = tomlget!(cfg, hostname, "slave_laser", as_str);
     let mut out = Servo::new();
-
-    out.gain_P = cfg.get(slave_laser_name)?.get("gain_p")?.as_float()? as f32;
-    out.gain_I = cfg.get(slave_laser_name)?.get("gain_i")?.as_float()? as f32;
-    out.gain_D = cfg.get(slave_laser_name)?.get("gain_d")?.as_float()? as f32;
-    out.set_alpha_I(
-        cfg.get(slave_laser_name)?
-            .get("integral_decay_rate")?
-            .as_float()? as f32,
+    out.gain_P = tomlget!(cfg, slave_laser_name, "gain_p", as_float, f32);
+    out.gain_I = tomlget!(cfg, slave_laser_name, "gain_i", as_float, f32);
+    out.gain_D = tomlget!(cfg, slave_laser_name, "gain_d", as_float, f32);
+    out.set_alpha_I(tomlget!(
+        cfg,
+        slave_laser_name,
+        "integral_decay_rate",
+        as_float,
+        f32
+    ));
+    out.max_feedback_step_size = tomlget!(
+        cfg,
+        slave_laser_name,
+        "feedback_max_step_size_v",
+        as_float,
+        f32
     );
-    out.max_feedback_step_size = cfg
-        .get(slave_laser_name)?
-        .get("feedback_max_step_size_v")?
-        .as_float()? as f32;
-    Some(out)
+    Ok(out)
 }
 
-#[must_use]
-pub fn multifit_from_config(cfg: &toml::Value) -> Option<FitSetup> {
-    let fit = &cfg.get("multifit")?;
+pub fn multifit_from_config(cfg: &toml::Value) -> Result<FitSetup, String> {
     let num_points = (16384
-        - fit.get("samples_skip_start")?.as_integer()?
-        - fit.get("samples_skip_end")?.as_integer()?
-        + fit.get("skip_rate")?.as_integer()?
+        - tomlget!(cfg, "multifit", "samples_skip_start", as_integer, u32)
+        - tomlget!(cfg, "multifit", "samples_skip_end", as_integer, u32)
+        + tomlget!(cfg, "multifit", "skip_rate", as_integer, u32)
         - 1)
-        / fit.get("skip_rate")?.as_integer()?;
-
+        / tomlget!(cfg, "multifit", "skip_rate", as_integer, u32);
     FitSetup::init(
-        fit.get("skip_rate")?.as_integer()? as u32,
-        num_points as u32,
-        fit.get("max_iterations")?.as_integer()? as u32,
-        fit.get("xtol")?.as_float()? as f32,
-        fit.get("gtol")?.as_float()? as f32,
-        fit.get("ftol")?.as_float()? as f32,
-        fit.get("max_av_ratio")?.as_float()? as f32,
+        tomlget!(cfg, "multifit", "skip_rate", as_integer, u32),
+        num_points,
+        tomlget!(cfg, "multifit", "max_iterations", as_integer, u32),
+        tomlget!(cfg, "multifit", "xtol", as_float, f32),
+        tomlget!(cfg, "multifit", "gtol", as_float, f32),
+        tomlget!(cfg, "multifit", "ftol", as_float, f32),
+        tomlget!(cfg, "multifit", "max_av_ratio", as_float, f32),
     )
+    .ok_or_else(|| "Failed to instantiate FitSetup struct".to_string())
 }
 
-#[must_use]
-pub fn interferometer_from_config(cfg: &str) -> Option<Interferometer> {
-    let data: toml::Value = toml::from_str(cfg).ok()?;
+pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, String> {
+    let mut out = Interferometer::new().ok_or("failed to instantiate interferometer struct")?;
 
-    let mut out = Interferometer::new()?;
-
-    out.ramp_setup = ramp_from_config(&data)?;
-    out.ref_laser = ref_laser_from_config(&data)?;
-    out.slave_laser = slave_laser_from_config(&data)?;
-    println!("test");
-    out.ref_lock = ref_lock_from_config(&data)?;
-    println!("test");
-    out.slave_lock = slave_lock_from_config(&data)?;
-    out.fit_setup_ref = multifit_from_config(&data)?;
-    out.fit_setup_slave = multifit_from_config(&data)?;
-    Some(out)
+    out.ramp_setup = ramp_from_config(cfg)?;
+    out.ref_laser = ref_laser_from_config(cfg)?;
+    out.slave_laser = slave_laser_from_config(cfg)?;
+    out.ref_lock = ref_lock_from_config(cfg)?;
+    out.slave_lock = slave_lock_from_config(cfg)?;
+    out.fit_setup_ref = multifit_from_config(cfg)?;
+    out.fit_setup_slave = multifit_from_config(cfg)?;
+    Ok(out)
 }

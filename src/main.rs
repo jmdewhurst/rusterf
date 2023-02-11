@@ -9,6 +9,7 @@
 use std::f32::consts::PI;
 use std::fs::read_to_string;
 use std::str::FromStr;
+use std::thread::spawn;
 use std::time::Instant;
 use std::{env, thread, time};
 
@@ -59,10 +60,14 @@ fn main() {
     let cfg_text = read_to_string(path_base.with_file_name("config.toml"))
         .expect("Failed to open config file!");
     let cfg = toml::from_str(&cfg_text).expect("Failed to parse config file");
-    let mut interf = configs::interferometer_from_config(&cfg_text)
-        .expect("Failed to construct interferometer object from config file");
-    let mut interf_comms = configs::comms_from_config(&cfg_text, &ctx)
-        .expect("Failed to construct sockets from config file");
+    let mut interf = match configs::interferometer_from_config(&cfg) {
+        Ok(x) => x,
+        Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
+    };
+    let mut interf_comms = match configs::comms_from_config(&cfg, &ctx) {
+        Ok(x) => x,
+        Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
+    };
 
     if interf.is_master() {
         println!("Designated as MASTER RP; controlling interferometer voltage ramp");
@@ -122,6 +127,11 @@ fn main() {
     let mut fit_started: Instant;
     let mut total_fitting_time_us: u32 = 0;
 
+    // let rayon_pool = rayon::ThreadPoolBuilder::new()
+    //     .num_threads(2)
+    //     .build()
+    //     .unwrap();
+
     println!("Entering main loop...");
     loop {
         interf.cycle_counter += 1;
@@ -175,7 +185,22 @@ fn main() {
         }
 
         fit_started = Instant::now();
-        // let (ref_result, slave_result) = rayon::join(
+        let (ref_result, slave_result) = thread::scope(|s| {
+            let ref_handle = s.spawn(|| {
+                interf.fit_setup_ref.fit(
+                    data_ch!(interf.ref_laser, pit).as_slice(),
+                    interf.ref_laser.fit_coefficients,
+                )
+            });
+            let slave_handle = s.spawn(|| {
+                interf.fit_setup_slave.fit(
+                    data_ch!(interf.slave_laser, pit).as_slice(),
+                    interf.slave_laser.fit_coefficients,
+                )
+            });
+            (ref_handle.join().unwrap(), slave_handle.join().unwrap())
+        });
+        // let (ref_result, slave_result) = rayon_pool.join(
         //     || {
         //         interf.fit_setup_ref.fit(
         //             data_ch!(interf.ref_laser, pit).as_slice(),
@@ -189,15 +214,15 @@ fn main() {
         //         )
         //     },
         // );
-        let ref_result = interf.fit_setup_ref.fit(
-            data_ch!(interf.ref_laser, pit).as_slice(),
-            interf.ref_laser.fit_coefficients,
-        );
+        // let ref_result = interf.fit_setup_ref.fit(
+        //     data_ch!(interf.ref_laser, pit).as_slice(),
+        //     interf.ref_laser.fit_coefficients,
+        // );
 
-        let slave_result = interf.fit_setup_slave.fit(
-            data_ch!(interf.slave_laser, pit).as_slice(),
-            interf.slave_laser.fit_coefficients,
-        );
+        // let slave_result = interf.fit_setup_slave.fit(
+        //     data_ch!(interf.slave_laser, pit).as_slice(),
+        //     interf.slave_laser.fit_coefficients,
+        // );
         total_fitting_time_us += fit_started.elapsed().as_micros() as u32;
         // println!(
         //     "[{}] fitting time {} us",
