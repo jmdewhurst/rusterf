@@ -6,7 +6,7 @@ fn main() {
     let target = std::env::var("TARGET").unwrap();
     cargo_messages(&out_dir);
 
-    // gsl(&out_dir, &target);
+    gsl(&out_dir, &target);
 
     cc::Build::new()
         .file("src/multifit/sinusoid_fitting.c")
@@ -32,7 +32,7 @@ fn gsl(out_dir: &str, target: &str) {
     if !tar_exists {
         Command::new("wget")
             .arg("ftp://ftp.gnu.org/gnu/gsl/gsl-2.7.tar.gz")
-            .current_dir(&out_dir)
+            .current_dir(out_dir)
             .status()
             .unwrap();
     }
@@ -41,18 +41,18 @@ fn gsl(out_dir: &str, target: &str) {
     let _ = Command::new("rm")
         .arg("-r")
         .arg("gsl-2.7")
-        .current_dir(&out_dir)
+        .current_dir(out_dir)
         .status();
 
     Command::new("tar")
         .arg("-zxvf")
         .arg("gsl-2.7.tar.gz")
-        .current_dir(&out_dir)
+        .current_dir(out_dir)
         .status()
         .unwrap();
     Command::new("mkdir")
         .arg("gsl_compiled")
-        .current_dir(&out_dir)
+        .current_dir(out_dir)
         .status()
         .unwrap();
 
