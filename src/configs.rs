@@ -147,12 +147,13 @@ pub fn scope_from_config(cfg: &toml::Value, scope: &mut Oscilloscope) -> Result<
     Ok(())
 }
 
-pub fn comms_from_config(cfg: &toml::Value, ctx: &zmq::Context) -> Result<InterfComms, String> {
-    let mut out = InterfComms::new(ctx).ok_or("failed to instantiate comms struct")?;
+pub async fn comms_from_config(cfg: &toml::Value) -> Result<InterfComms, String> {
+    let mut out = InterfComms::new().ok_or("failed to instantiate comms struct")?;
     out.bind_sockets(
         tomlget!(cfg, "general", "logs_port", as_integer, u16),
         tomlget!(cfg, "general", "command_port", as_integer, u16),
     )
+    .await
     .map_err(|e| format!("error [{}] in binding sockets", e))?;
     Ok(out)
 }

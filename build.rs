@@ -6,11 +6,11 @@ fn main() {
     let target = std::env::var("TARGET").unwrap();
     cargo_messages(&out_dir);
 
-    gsl(&out_dir, &target);
+    // gsl(&out_dir, &target);
 
-    cc::Build::new()
-        .file("src/multifit/sinusoid_fitting.c")
-        .compile("sinusoid_fitting");
+    // cc::Build::new()
+    //     .file("src/multifit/sinusoid_fitting.c")
+    //     .compile("sinusoid_fitting");
 }
 
 fn cargo_messages(out_dir: &str) {

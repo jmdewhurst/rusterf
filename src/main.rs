@@ -17,7 +17,6 @@ use rand::distributions::{Distribution, Uniform};
 
 use chrono::Local;
 // extern crate toml;
-extern crate zmq;
 use rayon::join;
 
 use librp_sys::dpin;
@@ -26,15 +25,10 @@ use librp_sys::oscilloscope::Oscilloscope;
 use librp_sys::Pitaya;
 use librp_sys::{core, oscilloscope};
 
-use self::lib::circle_buffer::CircleBuffer2n;
-
-pub mod lib;
-mod multifit;
-
-use crate::lib::configs;
-use crate::lib::interferometer::Interferometer;
-// use lib::laser::Laser;
-use crate::multifit::{sinusoid, wrapped_angle_difference, FitSetup};
+use rusterf::circle_buffer::CircleBuffer2n;
+use rusterf::configs;
+use rusterf::interferometer::Interferometer;
+use rusterf::multifit::{sinusoid, wrapped_angle_difference, FitSetup};
 
 macro_rules! data_ch {
     ($laser:expr, $pit:ident) => {
@@ -46,10 +40,9 @@ macro_rules! data_ch {
 }
 
 #[allow(clippy::too_many_lines)]
-fn main() {
+#[async_std::main]
+async fn main() {
     let mut pit = Pitaya::init().expect("Failed to intialize the Red Pitaya!");
-
-    let ctx = zmq::Context::new();
 
     let path_base = env::current_exe().expect("Failed to get the path to this program");
     println!(
@@ -64,7 +57,7 @@ fn main() {
         Ok(x) => x,
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
-    let mut interf_comms = match configs::comms_from_config(&cfg, &ctx) {
+    let mut interf_comms = match configs::comms_from_config(&cfg) {
         Ok(x) => x,
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
