@@ -3,10 +3,9 @@ use std::f32::consts::PI;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::Rng;
 
-pub mod lib;
 mod multifit;
 
-use self::lib::circle_buffer::CircleBuffer2n;
+use rusterf::circle_buffer::CircleBuffer2n;
 
 pub fn dynamic(c: &mut Criterion) {
     c.bench_function("Circle_buffer 2^16", |b| {

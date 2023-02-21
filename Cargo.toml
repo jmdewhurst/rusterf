@@ -15,12 +15,20 @@ chrono = "0.4.23"
 rand = "0.8.5"
 rayon = "1.6.1"
 async-std = "1.12.0"
-zeromq = {version= "0.3.3", default-features=false, features=["async-std-runtime", "tcp-transport"]}
+zeromq = {git = "https://github.com/zeromq/zmq.rs", default-features=false, features=["async-std-runtime", "tcp-transport"]}
 futures = "0.3.26"
+safe-transmute = "0.11.2"
 
 [build-dependencies]
 bindgen = "0.63.0"
 cc = "1.0.78"
+
+[package.metadata.cross.target.armv7-unknown-linux-gnueabihf]
+# pre-build = [
+# 	"dpkg --add-architecture $CROSS_DEB_ARCH",
+# 	"apt-get update && apt-get install --assume-yes libgsl-dev:$CROSS_DEB_ARCH",
+# ]
+dockerfile = "armv7.Dockerfile"
 
 [dev-dependencies]
 criterion = "0.4.0"

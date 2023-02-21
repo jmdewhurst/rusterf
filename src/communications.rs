@@ -5,11 +5,28 @@ use chrono::Local;
 use futures::future::FutureExt;
 use gethostname::gethostname;
 // use serde::{Deserialize, Serialize};
+use safe_transmute::{transmute_to_bytes, transmute_to_bytes_vec};
 use zeromq::prelude::*;
 
 use super::interferometer::Interferometer;
 
 use std::str;
+
+macro_rules! push_iter {
+    ($msg:ident, $iter:expr) => {
+        let vector = $iter.collect();
+        $msg.push_back(
+            transmute_to_bytes_vec(vector)
+                .expect("Can transmute f32/u32 to u8")
+                .into(),
+        );
+    };
+}
+macro_rules! push_slice {
+    ($msg:ident, $slice:expr) => {
+        $msg.push_back(transmute_to_bytes($slice).to_vec().into());
+    };
+}
 
 pub struct InterfComms {
     hostname: String,
@@ -112,31 +129,20 @@ impl InterfComms {
     //}
 
     pub async fn publish_logs(&mut self, interf: &mut Interferometer) -> zeromq::ZmqResult<()> {
-        let mut msg: zeromq::ZmqMessage = self.hostname.to_owned().into();
-        for i in self.outgoing_buffer.iter_mut() {
-            i.clear();
-            i.reserve_exact(interf.ref_laser.phase_log.len());
-        }
-        self.outgoing_buffer[0].extend(&interf.ref_laser.phase_log);
-        self.outgoing_buffer[1].extend(&interf.slave_laser.phase_log);
-        self.outgoing_buffer[2].extend(&interf.ref_laser.feedback_log);
-        self.outgoing_buffer[3].extend(&interf.slave_laser.feedback_log);
-
-        let outgoing: [Vec<u8>; 4] = Default::default();
+        let mut msg: zeromq::ZmqMessage = self.hostname.clone().into();
 
         msg.push_back(interf.cycle_counter.to_le_bytes().to_vec().into());
 
-        msg.push_back(interf.ref_laser.phase_log.iter().collect());
+        push_iter!(msg, interf.ref_laser.phase_log.iter());
+        push_iter!(msg, interf.slave_laser.phase_log.iter());
+        push_iter!(msg, interf.ref_laser.feedback_log.iter());
+        push_iter!(msg, interf.slave_laser.feedback_log.iter());
 
-        for i in self.outgoing_buffer.iter_mut() {
-            msg.push_back(vf32_to_u8(&i).into());
-        }
+        push_slice!(msg, &interf.last_waveform_ref);
+        push_slice!(msg, &interf.last_waveform_slave);
 
-        msg.push_back(vu32_to_u8(&interf.last_waveform_ref).into());
-        msg.push_back(vu32_to_u8(&interf.last_waveform_slave).into());
-
-        msg.push_back(vf32_to_u8(&interf.ref_laser.fit_coefficients).into());
-        msg.push_back(vf32_to_u8(&interf.slave_laser.fit_coefficients).into());
+        push_slice!(msg, &interf.ref_laser.fit_coefficients);
+        push_slice!(msg, &interf.slave_laser.fit_coefficients);
 
         self.logs_sock.send(msg).await
     }

@@ -17,7 +17,8 @@ use rand::distributions::{Distribution, Uniform};
 
 use chrono::Local;
 // extern crate toml;
-use rayon::join;
+// use rayon::join;
+// use zeromq;
 
 use librp_sys::dpin;
 use librp_sys::generator::{DCChannel, PulseChannel};
@@ -28,7 +29,7 @@ use librp_sys::{core, oscilloscope};
 use rusterf::circle_buffer::CircleBuffer2n;
 use rusterf::configs;
 use rusterf::interferometer::Interferometer;
-use rusterf::multifit::{sinusoid, wrapped_angle_difference, FitSetup};
+use rusterf::multifit;
 
 macro_rules! data_ch {
     ($laser:expr, $pit:ident) => {
@@ -57,7 +58,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
-    let mut interf_comms = match configs::comms_from_config(&cfg) {
+    let mut interf_comms = match configs::comms_from_config(&cfg).await {
         Ok(x) => x,
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
@@ -118,7 +119,7 @@ async fn main() {
 
     let mut triggered: Instant;
     let mut fit_started: Instant;
-    let mut total_fitting_time_us: u32 = 0;
+    let mut total_fitting_time_us: usize = 0;
 
     // let rayon_pool = rayon::ThreadPoolBuilder::new()
     //     .num_threads(2)
@@ -154,14 +155,14 @@ async fn main() {
 
         //TODO: Update waveforms for publishing
         if interf_comms.should_publish_logs(interf.cycle_counter) {
-            match interf_comms.publish_logs(&mut interf) {
+            match interf_comms.publish_logs(&mut interf).await {
                 Ok(()) => {}
                 Err(x) => {
                     eprintln!("[{}] Failed to publish logs: error [{}]", Local::now(), x);
                 }
             }
         }
-        while let Some(request) = interf_comms.handle_socket_request(&mut interf) {
+        while let Some(request) = interf_comms.handle_socket_request(&mut interf).await {
             println!("[{}] Handled socket request <{}>", Local::now(), request);
         }
 
@@ -191,7 +192,14 @@ async fn main() {
                     interf.slave_laser.fit_coefficients,
                 )
             });
-            (ref_handle.join().unwrap(), slave_handle.join().unwrap())
+            (
+                ref_handle
+                    .join()
+                    .expect("Panicked during fitting of reference waveform"),
+                slave_handle
+                    .join()
+                    .expect("Panicked during fitting of reference waveform"),
+            )
         });
         // let (ref_result, slave_result) = rayon_pool.join(
         //     || {
@@ -216,7 +224,7 @@ async fn main() {
         //     data_ch!(interf.slave_laser, pit).as_slice(),
         //     interf.slave_laser.fit_coefficients,
         // );
-        total_fitting_time_us += fit_started.elapsed().as_micros() as u32;
+        total_fitting_time_us += fit_started.elapsed().as_micros() as usize;
         // println!(
         //     "[{}] fitting time {} us",
         //     Local::now(),
