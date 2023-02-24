@@ -1,6 +1,10 @@
 use std::path::Path;
 use std::process::Command;
 
+// Should be set to true if you want to build software that will run on the dev machine.
+// Set to false to build software to run on the Red Pitaya
+const HAS_NATIVE_GSL: bool = false;
+
 fn main() {
     let out_dir = std::env::var("OUT_DIR").expect("failed to get OUT_DIR");
     let target = std::env::var("TARGET").expect("failed to get TARGET");
@@ -8,25 +12,40 @@ fn main() {
 
     // gsl(&out_dir, &target);
 
-    cc::Build::new()
-        .file("src/multifit/sinusoid_fitting.c")
-        .include(format!("{}/gsl_compiled/include/", out_dir))
-        .compile("sinusoid_fitting");
+    if HAS_NATIVE_GSL {
+        cc::Build::new()
+            .file("src/multifit/sinusoid_fitting.c")
+            .include("gsl_native/include/")
+            .static_flag(true)
+            .compile("sinusoid_fitting");
+    } else {
+        cc::Build::new()
+            .file("src/multifit/sinusoid_fitting.c")
+            .include("/gsl_compiled/include/")
+            .static_flag(true)
+            .compile("sinusoid_fitting");
+    }
 }
 
 fn cargo_messages(out_dir: &str) {
     println!("cargo:rerun-if-changed=src/multifit/sinusoid_fitting.c");
     println!("cargo:rerun-if-changed=src/multifit/sinusoid_fitting.h");
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rustc-link-lib=gsl");
-    println!("cargo:rustc-link-lib=gslcblas");
 
-    // println!("cargo:rustc-link-arg={}/gsl_compiled/lib", out_dir);
-    // println!("cargo:rustc-link-arg={}/gsl_compiled/lib/libgsl.a", out_dir);
-    // println!(
-    //     "cargo:rustc-link-arg={}/gsl_compiled/lib/libgslcblas.a",
-    //     out_dir
-    // );
+    if HAS_NATIVE_GSL {
+        // These two will link to a natively built instance of gsl installed at rusterf/gsl_native
+        // If doing a lot of development/testing on a dev machine, it's worth building gsl and
+        // uncommenting these, to avoid dealing with docker and rebuilding gsl frequently.
+        println!("cargo:rustc-link-arg-bin=rusterf=gsl_native/lib/libgsl.a");
+        println!("cargo:rustc-link-arg-bin=rusterf=gsl_native/lib/libgslcblas.a");
+    } else {
+        // These two will make rustc link the project to the copy of gsl that gets built by
+        // `armv7.Dockerfile`. Uncomment these two to build for the Red Pitaya
+        println!("cargo:rustc-link-arg-bin=rusterf=/gsl_compiled/lib/libgsl.a");
+        println!("cargo:rustc-link-arg-bin=rusterf=/gsl_compiled/lib/libgslcblas.a");
+        println!("cargo:rustc-link-arg-bin=rusterf=/usr/arm-linux-gnueabihf/lib/libm.a");
+        println!("cargo:rustc-link-arg-bin=rusterf=/usr/arm-linux-gnueabihf/lib/libc.a");
+    }
 }
 
 fn gsl(out_dir: &str, target: &str) {

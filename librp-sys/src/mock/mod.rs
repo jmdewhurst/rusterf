@@ -88,6 +88,7 @@ fn_ok!(
     (dir: rp_pinDirection_t)
 );
 fn_ok!(rp_DpinSetState, (pin: rp_dpin_t), (state: rp_pinState_t));
+#[allow(unused_variables)]
 pub unsafe fn rp_DpinGetState(pin: rp_dpin_t, state: *mut rp_pinState_t) -> ::std::os::raw::c_int {
     *state = 0;
     if cfg!(feature = "no_api_loud") {

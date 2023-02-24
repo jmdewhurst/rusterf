@@ -5,6 +5,9 @@
 /// overwrite the oldest data. Also, it starts out zeroed, not empty, unlike a vector.
 /// As a result, it's much faster to immutably iterate over than a vecdeque (~8x faster in my
 /// benchmarks), as well as being more concise and only allocating on initialization.
+/// NOTE:
+/// this module makes heavy use of the fact that if `k` is a power of two, then
+/// `x % k` is equal to `x & (k - 1)`. That is, `2^n - 1` is a bitmask of the lower `n` bits
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub struct CircleBuffer2n<T: Copy + Default> {
@@ -36,6 +39,7 @@ impl<T: Copy + Default> CircleBuffer2n<T> {
     }
 
     #[must_use]
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.len
     }
@@ -47,7 +51,7 @@ impl<T: Copy + Default> CircleBuffer2n<T> {
 
     #[must_use]
     pub fn index(&self) -> usize {
-        self.posn % self.len
+        self.posn & (self.len - 1)
     }
 
     pub fn push(&mut self, val: T) {
@@ -77,7 +81,7 @@ impl<T: Copy + Default> CircleBuffer2n<T> {
 
     #[must_use]
     pub fn iter_mut(&mut self) -> IterMut<T> {
-        let (second, first) = self.data.split_at_mut(self.posn % self.len);
+        let (second, first) = self.data.split_at_mut(self.posn & (self.len - 1));
         IterMut {
             parent_first: Some(first),
             parent_second: Some(second),
@@ -181,7 +185,7 @@ mod tests {
         for i in 0..10 {
             buff.push(i);
         }
-        println!("buff {:?}", buff);
+        // println!("buff {:?}", buff);
         let vecb: Vec<i32> = buff.iter().collect();
         let vec_ref: Vec<i32> = (2..10).collect();
         assert_eq!(vecb, vec_ref);
@@ -199,6 +203,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_precision_loss)]
     fn iter_mut() {
         let mut buff = CircleBuffer2n::new(10).expect("should allocate");
         for i in 0..1024 {
@@ -213,6 +218,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_precision_loss)]
     fn size_hint() {
         let mut buff = CircleBuffer2n::new(10).expect("should allocate");
         for i in 0..1024 {

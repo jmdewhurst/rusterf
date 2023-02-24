@@ -8,6 +8,7 @@ use crate::dpin::DigitalPin;
 use crate::generator::Generator;
 use crate::oscilloscope::Oscilloscope;
 
+#[cfg(not(any(feature = "no_api", feature = "no_api_loud")))]
 use std::process::Command;
 
 #[derive(Debug)]

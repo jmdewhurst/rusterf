@@ -23,11 +23,15 @@ safe-transmute = "0.11.2"
 bindgen = "0.63.0"
 cc = "1.0.78"
 
-[package.metadata.cross.target.armv7-unknown-linux-gnueabihf]
-# pre-build = [
-# 	"dpkg --add-architecture $CROSS_DEB_ARCH",
-# 	"apt-get update && apt-get install --assume-yes libgsl-dev:$CROSS_DEB_ARCH",
+# [build]
+# rustflags = [
+# 	"-C", "target-feature=+crt-static",
 # ]
+
+[package.metadata.cross.target.armv7-unknown-linux-gnueabihf]
+dockerfile = "armv7.Dockerfile"
+
+[package.metadata.cross.target.armv7-unknown-linux-musleabihf]
 dockerfile = "armv7.Dockerfile"
 
 [dev-dependencies]

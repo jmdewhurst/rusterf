@@ -104,14 +104,14 @@ impl Oscilloscope {
         let num_points =
             ((BUFF_SIZE - start_clamped - end_clamped) + rate_clamped - 1) / rate_clamped;
         self.chA_buff_float = Vec::new();
-        self.chA_buff_float.reserve_exact(num_points as usize);
+        self.chA_buff_float.reserve_exact(num_points);
         self.chB_buff_float = Vec::new();
-        self.chB_buff_float.reserve_exact(num_points as usize);
+        self.chB_buff_float.reserve_exact(num_points);
         self.region = ScopeRegion {
             skip_start: start_clamped,
             skip_end: end_clamped,
             skip_rate: rate_clamped,
-            num_points: num_points as usize,
+            num_points,
         }
     }
 
@@ -131,7 +131,7 @@ impl Oscilloscope {
         }
 
         if dec != dec_factor {
-            eprintln!("Attempting to set invalid decimation factor {}! Valid decimation factors are 1, 2, 4, 8, or any value between 16 and 65536. Proceeding with decimation factor of {}", dec, dec_factor);
+            eprintln!("Attempting to set invalid decimation factor {dec}! Valid decimation factors are 1, 2, 4, 8, or any value between 16 and 65536. Proceeding with decimation factor of {dec_factor}");
         }
 
         wrap_call!(rp_AcqSetDecimationFactor, dec_factor)
@@ -170,6 +170,7 @@ impl Oscilloscope {
 
     /// Returns a pair of vectors containing the most recent scope data (as u32) culled to
     /// `self`'s configured ROI. NOTE: allocates a pair of vectors
+    #[allow(clippy::unnecessary_cast)]
     pub fn get_scope_data_both(&mut self) -> APIResult<(Vec<u32>, Vec<u32>)> {
         // returns owned vectors of the data in the region of interest described by self.region.
         // The API has functions for this, but only for copying the whole acq buffer, which is
@@ -183,7 +184,7 @@ impl Oscilloscope {
         let mut ret_a = Vec::with_capacity(self.region.num_points);
         let mut ret_b = Vec::with_capacity(self.region.num_points);
         for i in (self.region.skip_start..(BUFF_SIZE - self.region.skip_end))
-            .step_by(self.region.skip_rate as usize)
+            .step_by(self.region.skip_rate)
         {
             ret_a.push(unsafe {
                 read_volatile(
@@ -204,6 +205,7 @@ impl Oscilloscope {
     /// updates the `Oscilloscope`'s internal buffers with most recent scope data.
     /// Provided as an alternative to `get_scope_data_both` that avoids heap allocation.
     #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::unnecessary_cast)]
     pub fn update_scope_data_both(&mut self) -> APIResult<()> {
         let index = self.get_write_index_at_trigger()? as isize;
 
@@ -213,7 +215,7 @@ impl Oscilloscope {
         self.chB_buff_float.reserve_exact(self.region.num_points);
 
         let region_iter = (self.region.skip_start..(BUFF_SIZE - self.region.skip_end))
-            .step_by(self.region.skip_rate as usize);
+            .step_by(self.region.skip_rate);
         self.chA_buff_float.extend(region_iter.map(|i| unsafe {
             read_volatile(
                 self.chA_buff_raw
@@ -237,6 +239,7 @@ impl Oscilloscope {
     /// are user-provided so that the user can avoid unnecessary heap allocations.
     /// This version does not cull data down to the region of interest, and is intended to be
     /// used to send the full scope trace to an external monitoring program.
+    #[allow(clippy::unnecessary_cast)]
     pub fn write_raw_waveform(&mut self, chA: &mut Vec<u32>, chB: &mut Vec<u32>) -> APIResult<()> {
         let index = self.get_write_index_at_trigger()? as isize;
         chA.clear();
@@ -264,6 +267,7 @@ impl Oscilloscope {
     /// If an RP API call returns a failure code, this returns Err containing the failure.
     /// # Panics
     /// Panics if the RP API returns a catastrophically wrong value
+    #[allow(clippy::unnecessary_cast)]
     pub fn get_scope_data_channel(&mut self, ch: Channel) -> APIResult<Vec<u32>> {
         let index = self.get_write_index_at_trigger()? as isize;
         let mut ret = Vec::with_capacity(self.region.num_points);

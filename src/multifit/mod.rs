@@ -17,14 +17,17 @@ extern "C" {
 
 const LOW_CONTRAST_THRESHOLD: f32 = 100.0;
 
+#[must_use]
 pub fn wrapped_angle_difference(a: f32, b: f32) -> f32 {
     (a.sin() * b.cos() - a.cos() * b.sin()).atan2(a.cos() * b.cos() + a.sin() * b.sin())
 }
 
+#[must_use]
 pub fn sinusoid(x: f32, p: [f32; 4]) -> f32 {
     p[0] * (p[1] * x - p[2]).cos() + p[3]
 }
 
+#[must_use]
 pub fn sinusoid_b(x: f32, p: [f32; 4]) -> f32 {
     p[0] * (p[2] * x).cos() + p[1] * (p[2] * x).cos() + p[3]
 }
@@ -78,6 +81,7 @@ pub struct FitSetup {
 unsafe impl Send for FitSetup {}
 
 impl FitSetup {
+    #[must_use]
     pub fn init(
         skip_rate: u32,
         num_points: u32,
@@ -113,12 +117,20 @@ impl FitSetup {
     /// A cos(wx) + B sin(wx) + offset
     /// From the user's perspective, this should function as if it fit the first function above, but
     /// the code on the C side MUST use the second function.
+    /// # Panics
+    /// If building with `debug_assertions`, i.e. a development build, will panic if you try to fit
+    /// data of different length than the configured `FitSetup`
     #[allow(clippy::cast_precision_loss)]
     pub fn fit(&mut self, data: &[f32], guess: [f32; 4]) -> FitResult {
-        assert!(
-            data.len() == self.num_points as usize,
-            "Cannot fit to data of length != configured number of points"
-        );
+        if cfg!(debug_assertions) {
+            assert!(
+                data.len() == self.num_points as usize,
+                "Cannot fit to data of length != configured number of points"
+            );
+        } else if data.len() != self.num_points as usize {
+            let data = &data[..data.len().min(self.num_points as usize)];
+            eprintln!("[{}] function multifit::fit recieved data of length {} not equal to the configured length {}", Local::now(), data.len(), self.num_points);
+        }
         let guess_internal = [
             guess[0] * guess[2].cos(),
             guess[0] * guess[2].sin(),
@@ -154,12 +166,14 @@ impl FitSetup {
 
         FitResult {
             gsl_status: raw_result.gsl_status,
-            n_iterations: raw_result.niter as i32,
+            n_iterations: raw_result.niter,
             params,
             low_contrast,
         }
     }
 
+    /// # Panics
+    /// panics if passed data of different length that the configured length of `self`
     pub fn fit_deprecated(&mut self, data: &[f32], guess: [f32; 4]) -> FitResult {
         // function configured to fit the function A * cos(w x - phi) + offset
         // Not as computationally stable as the newer one, but leaving it in for posterity
@@ -193,7 +207,7 @@ impl FitSetup {
 
         FitResult {
             gsl_status: raw_result.gsl_status,
-            n_iterations: raw_result.niter as i32,
+            n_iterations: raw_result.niter,
             params: raw_result.params,
             low_contrast,
         }
