@@ -171,7 +171,7 @@ uint32_t init_multifit_setup(multifit_setup_t *setup) {
   *(setup->setup_params) = gsl_multifit_nlinear_default_parameters();
   setup->setup_params->trs = gsl_multifit_nlinear_trs_lm;
   // setup->setup_params->trs = gsl_multifit_nlinear_trs_lmaccel;
-  setup->setup_params->solver = gsl_multifit_nlinear_solver_mcholesky;
+  setup->setup_params->solver = gsl_multifit_nlinear_solver_cholesky;
   setup->setup_params->scale = gsl_multifit_nlinear_scale_more;
   setup->setup_params->factor_up = 3.;
   setup->setup_params->avmax = setup->max_av_ratio;
