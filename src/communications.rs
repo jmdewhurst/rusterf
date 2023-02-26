@@ -5,27 +5,29 @@ use chrono::Local;
 use futures::future::FutureExt;
 use gethostname::gethostname;
 // use serde::{Deserialize, Serialize};
-use safe_transmute::{transmute_to_bytes, transmute_to_bytes_vec};
+use bytes::Bytes;
 use zeromq::prelude::*;
 
 use super::interferometer::Interferometer;
 
 use std::str;
 
-macro_rules! push_iter {
-    ($msg:ident, $iter:expr) => {
-        let vector = $iter.collect();
-        $msg.push_back(
-            transmute_to_bytes_vec(vector)
-                .expect("Can transmute f32/u32 to u8")
-                .into(),
-        );
-    };
+fn iterf32_to_bytes<C>(collection: C) -> Bytes
+where
+    C: IntoIterator<Item = f32>,
+{
+    collection
+        .into_iter()
+        .flat_map(f32::to_le_bytes)
+        .collect::<Vec<u8>>()
+        .into()
 }
-macro_rules! push_slice {
-    ($msg:ident, $slice:expr) => {
-        $msg.push_back(transmute_to_bytes($slice).to_vec().into());
-    };
+fn vecu32_to_bytes(collection: &[u32]) -> Bytes {
+    collection
+        .iter()
+        .flat_map(|x| x.to_le_bytes())
+        .collect::<Vec<u8>>()
+        .into()
 }
 
 pub struct InterfComms {
@@ -37,12 +39,12 @@ pub struct InterfComms {
     logs_publish_frequency_exponent: u8,
 }
 
-fn vf32_to_u8(v: &[f32]) -> &[u8] {
-    unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 4) }
-}
-fn vu32_to_u8(v: &[u32]) -> &[u8] {
-    unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 4) }
-}
+// fn vf32_to_u8(v: &[f32]) -> &[u8] {
+//     unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 4) }
+// }
+// fn vu32_to_u8(v: &[u32]) -> &[u8] {
+//     unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 4) }
+// }
 fn floor_exp(num: u32) -> u8 {
     let mut exp = 0;
     while 1 << exp < num {
@@ -85,9 +87,9 @@ impl InterfComms {
     pub async fn handle_socket_request(&mut self, interf: &mut Interferometer) -> Option<String> {
         let cmd_msg = self.command_sock.recv().now_or_never()?.ok()?;
         let cmd = str::from_utf8(cmd_msg.get(0)?).ok()?;
-        match interf.process_command(cmd.split(':')) {
+        let _ = match interf.process_command(cmd.split(':')) {
             Ok(None) => self.command_sock.send("".into()).await,
-            Ok(Some(s)) => self.command_sock.send(format!("{}", s).into()).await,
+            Ok(Some(s)) => self.command_sock.send(s.to_string().into()).await,
             Err(_) => {
                 eprintln!("[{}] failed to process command [{}]", Local::now(), cmd);
                 self.command_sock.send("".into()).await
@@ -133,16 +135,16 @@ impl InterfComms {
 
         msg.push_back(interf.cycle_counter.to_le_bytes().to_vec().into());
 
-        push_iter!(msg, interf.ref_laser.phase_log.iter());
-        push_iter!(msg, interf.slave_laser.phase_log.iter());
-        push_iter!(msg, interf.ref_laser.feedback_log.iter());
-        push_iter!(msg, interf.slave_laser.feedback_log.iter());
+        msg.push_back(iterf32_to_bytes(&interf.ref_laser.phase_log));
+        msg.push_back(iterf32_to_bytes(&interf.slave_laser.phase_log));
+        msg.push_back(iterf32_to_bytes(&interf.ref_laser.feedback_log));
+        msg.push_back(iterf32_to_bytes(&interf.slave_laser.feedback_log));
 
-        push_slice!(msg, &interf.last_waveform_ref);
-        push_slice!(msg, &interf.last_waveform_slave);
+        msg.push_back(vecu32_to_bytes(&interf.last_waveform_ref));
+        msg.push_back(vecu32_to_bytes(&interf.last_waveform_slave));
 
-        push_slice!(msg, &interf.ref_laser.fit_coefficients);
-        push_slice!(msg, &interf.slave_laser.fit_coefficients);
+        msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
+        msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
 
         self.logs_sock.send(msg).await
     }
@@ -199,11 +201,11 @@ impl InterfComms {
         command_port: u16,
     ) -> zeromq::ZmqResult<()> {
         self.logs_sock
-            .bind(format!("tcp://0.0.0.0:{}", log_port).as_str())
+            .bind(format!("tcp://0.0.0.0:{log_port}").as_str())
             .await?;
         self.logs_port = log_port;
         self.command_sock
-            .bind(format!("tcp://0.0.0.0:{}", command_port).as_str())
+            .bind(format!("tcp://0.0.0.0:{command_port}").as_str())
             .await?;
         self.command_port = command_port;
         Ok(())
