@@ -61,6 +61,18 @@ async fn main() {
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
 
+    let DO_DEBUG_LOGGING;
+    let DEBUG_LOG_FREQ_LOG;
+    if let Some(toml::Value::Integer(freq)) =
+        cfg.get("general").unwrap().get("debug_list_freq_cycles")
+    {
+        DO_DEBUG_LOGGING = true;
+        DEBUG_LOG_FREQ_LOG = configs::floor_exp(*freq as u32);
+    } else {
+        DO_DEBUG_LOGGING = false;
+        DEBUG_LOG_FREQ_LOG = 0;
+    }
+
     if interf.is_master() {
         println!("Designated as MASTER RP; controlling interferometer voltage ramp");
     }
@@ -122,11 +134,20 @@ async fn main() {
     let mut triggered: Instant;
     let mut fit_started: Instant;
     let mut total_fitting_time_us: u32 = 0;
+    let mut total_err_ref: f32 = 0.0;
+    let mut variance_ref: f32 = 0.0;
+    let mut total_err_slave: f32 = 0.0;
+    let mut variance_slave: f32 = 0.0;
+    let mut iterations_ref = 0;
+    let mut iterations_slave = 0;
 
     let rayon_pool = rayon::ThreadPoolBuilder::new()
         .num_threads(2)
         .build()
         .unwrap();
+
+    let last_ref_result: Option<multifit::FitResult> = None;
+    let last_slave_result: Option<multifit::FitResult> = None;
 
     println!("Entering main loop...");
     loop {
@@ -157,7 +178,6 @@ async fn main() {
                 .set_state(ready_to_acquire_pin, dpin::PinState::High);
         }
 
-        //TODO: Update waveforms for publishing
         if interf_comms.should_publish_logs(interf.cycle_counter) {
             match interf_comms.publish_logs(&mut interf).await {
                 Ok(()) => {}
@@ -170,7 +190,48 @@ async fn main() {
             println!("[{}] Handled socket request <{}>", Local::now(), request);
         }
 
-        //TODO: Debug loggin/printing
+        if DO_DEBUG_LOGGING && interf.cycle_counter & ((1 << DEBUG_LOG_FREQ_LOG) - 1) == 0 {
+            let denom = 2.0_f32.powi(DEBUG_LOG_FREQ_LOG.into());
+            println!(
+                "[{}] average fitting time {} us",
+                Local::now(),
+                total_fitting_time_us >> 9
+            );
+            total_fitting_time_us = 0;
+            println!(
+                "\taverage iterations per fit cycle: [ref: {:.2}, slave: {:.2}]",
+                iterations_ref as f32 / denom,
+                iterations_slave as f32 / denom,
+            );
+            iterations_ref = 0;
+            iterations_slave = 0;
+            println!(
+                "\taverage phase error (rad): [ref: {:.2}, slave: {:.2}]",
+                total_err_ref / denom,
+                total_err_slave / denom,
+            );
+            println!(
+                "\tRMS phase error (rad): [ref: {:.4}, slave: {:.4}]",
+                (variance_ref / denom).sqrt(),
+                (variance_slave / denom).sqrt(),
+            );
+            total_err_ref = 0.0;
+            variance_ref = 0.0;
+            total_err_slave = 0.0;
+            variance_slave = 0.0;
+        }
+
+        // if the last fit got a suspicious result, we should reset our ''guess'' parameters
+        // to try to avoid getting stuck fitting to a bad mode. Also just reset the guess
+        // occasionally just in case.
+        let reset_timer = interf.cycle_counter & ((1 << 12) - 1) == 0;
+        if reset_timer || last_ref_result.as_ref().map_or(false, |r| r.low_contrast) {
+            interf.ref_laser.fit_coefficients = [0.0, interf.ref_laser.fringe_freq(), 0.0, 1000.0];
+        }
+        if reset_timer || last_slave_result.as_ref().map_or(false, |r| r.low_contrast) {
+            interf.slave_laser.fit_coefficients =
+                [0.0, interf.slave_laser.fringe_freq(), 0.0, 1000.0];
+        }
 
         loop {
             if triggered.elapsed().as_nanos() > interf.ramp_setup.rise_time_ns() {
@@ -222,19 +283,13 @@ async fn main() {
         //     interf.slave_laser.fit_coefficients,
         // );
         total_fitting_time_us += fit_started.elapsed().as_micros() as u32;
+        iterations_ref += ref_result.n_iterations;
+        iterations_slave += slave_result.n_iterations;
         // println!(
         //     "[{}] fitting time {} us",
         //     Local::now(),
         //     total_fitting_time_us
         // );
-        if interf.cycle_counter & ((1 << 9) - 1) == 0 {
-            println!(
-                "[{}] average fitting time {} us",
-                Local::now(),
-                total_fitting_time_us >> 9
-            );
-            total_fitting_time_us = 0;
-        }
 
         let ref_error =
             multifit::wrapped_angle_difference(ref_result.params[2], interf.ref_lock.setpoint());
@@ -244,6 +299,11 @@ async fn main() {
                     / interf.slave_laser.wavelength_nm(),
             interf.slave_lock.setpoint(),
         );
+        total_err_ref += ref_error;
+        variance_ref += ref_error * ref_error;
+        total_err_slave += slave_error;
+        variance_slave += slave_error * slave_error;
+
         let ref_adjustment = interf.ref_lock.do_pid(ref_error);
         let slave_adjustment = interf.slave_lock.do_pid(slave_error);
 
@@ -267,6 +327,9 @@ async fn main() {
         let _ = pit
             .scope
             .set_trigger_source(oscilloscope::TrigSrc::ExtRising);
+
+        let last_ref_result = Some(ref_result);
+        let last_slave_result = Some(slave_result);
 
         if interf_comms.should_publish_logs(interf.cycle_counter + 4) {
             // Ideally we'd always send the most recent waveform, but we handle communications

@@ -8,6 +8,7 @@ use gethostname::gethostname;
 use bytes::Bytes;
 use zeromq::prelude::*;
 
+use super::configs::floor_exp;
 use super::interferometer::Interferometer;
 
 use std::str;
@@ -45,16 +46,6 @@ pub struct InterfComms {
 // fn vu32_to_u8(v: &[u32]) -> &[u8] {
 //     unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 4) }
 // }
-fn floor_exp(num: u32) -> u8 {
-    let mut exp = 0;
-    while 1 << exp < num {
-        exp += 1;
-    }
-    if 1 << exp > num {
-        exp -= 1;
-    }
-    exp
-}
 
 impl InterfComms {
     #[must_use]
@@ -217,20 +208,6 @@ impl InterfComms {
         let _ = self.logs_sock.unbind_all().await;
         let _ = self.command_sock.unbind_all().await;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn floor_exp_test() {
-        assert_eq!(floor_exp(1), 0);
-        assert_eq!(floor_exp(2), 1);
-        assert_eq!(floor_exp(3), 1);
-        assert_eq!(floor_exp(4), 2);
-        assert_eq!(floor_exp(2048), 11);
     }
 }
 

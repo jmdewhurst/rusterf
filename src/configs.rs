@@ -48,6 +48,17 @@ macro_rules! tomlget {
             .ok_or_else(|| format!("failed to convert {}:{} to boolean", $sec, $key))?
     };
 }
+pub fn floor_exp(num: u32) -> u8 {
+    let mut exp = 0;
+    while 1 << exp < num {
+        exp += 1;
+    }
+    if 1 << exp > num {
+        exp -= 1;
+    }
+    exp
+}
+
 pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(), String> {
     let hostname = gethostname()
         .into_string()
@@ -349,7 +360,7 @@ pub fn multifit_from_config(cfg: &toml::Value) -> Result<FitSetup, String> {
         + tomlget!(cfg, "multifit", "skip_rate", as_integer, u32)
         - 1)
         / tomlget!(cfg, "multifit", "skip_rate", as_integer, u32);
-    FitSetup::init(
+    let mut out = FitSetup::init(
         tomlget!(cfg, "multifit", "skip_rate", as_integer, u32),
         num_points,
         tomlget!(cfg, "multifit", "max_iterations", as_integer, u32),
@@ -358,7 +369,9 @@ pub fn multifit_from_config(cfg: &toml::Value) -> Result<FitSetup, String> {
         tomlget!(cfg, "multifit", "ftol", as_float, f32),
         tomlget!(cfg, "multifit", "max_av_ratio", as_float, f32),
     )
-    .ok_or_else(|| "Failed to instantiate FitSetup struct".to_string())
+    .ok_or_else(|| "Failed to instantiate FitSetup struct".to_string())?;
+    out.low_contrast_threshold = tomlget!(cfg, "multifit", "low_contrast_threshold", as_float, f32);
+    Ok(out)
 }
 
 pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, String> {
@@ -372,4 +385,18 @@ pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, S
     out.fit_setup_ref = multifit_from_config(cfg)?;
     out.fit_setup_slave = multifit_from_config(cfg)?;
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn floor_exp_test() {
+        assert_eq!(floor_exp(1), 0);
+        assert_eq!(floor_exp(2), 1);
+        assert_eq!(floor_exp(3), 1);
+        assert_eq!(floor_exp(4), 2);
+        assert_eq!(floor_exp(2048), 11);
+    }
 }
