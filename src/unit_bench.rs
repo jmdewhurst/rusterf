@@ -5,13 +5,13 @@ use rand::Rng;
 
 mod multifit;
 
-use rusterf::circle_buffer::CircleBuffer2n;
+use rusterf::ring_buffer::DyadicRingBuffer;
 
 pub fn dynamic(c: &mut Criterion) {
     c.bench_function("Circle_buffer 2^16", |b| {
         b.iter(|| {
-            let mut buff = CircleBuffer2n::<usize>::new(16).unwrap();
-            let mut out = CircleBuffer2n::<usize>::new(3).unwrap();
+            let mut buff = DyadicRingBuffer::<usize>::new(16).unwrap();
+            let mut out = DyadicRingBuffer::<usize>::new(3).unwrap();
             // let mut vecd = VecDeque::with_capacity(65536);
             // let mut outv = VecDeque::with_capacity(8);
             // for _ in 0..8 {

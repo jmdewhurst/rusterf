@@ -10,14 +10,14 @@
 /// `x % k` is equal to `x & (k - 1)`. That is, `2^n - 1` is a bitmask of the lower `n` bits
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
-pub struct CircleBuffer2n<T: Copy + Default> {
+pub struct DyadicRingBuffer<T: Copy + Default> {
     n: usize,
     len: usize,
     posn: usize,
     data: Vec<T>,
 }
 
-impl<T: Copy + Default> CircleBuffer2n<T> {
+impl<T: Copy + Default> DyadicRingBuffer<T> {
     #[must_use]
     pub fn new(n: usize) -> Option<Self> {
         // semi-arbitrary maximum size -- at the moment, we limit log length to about 1M entries.
@@ -30,7 +30,7 @@ impl<T: Copy + Default> CircleBuffer2n<T> {
         for _ in 0..(1 << n) {
             buff.push(Default::default());
         }
-        Some(CircleBuffer2n {
+        Some(DyadicRingBuffer {
             data: buff,
             n,
             len: (1 << n),
@@ -90,7 +90,7 @@ impl<T: Copy + Default> CircleBuffer2n<T> {
 }
 
 pub struct Iter<'a, T: Default + Copy> {
-    parent: &'a CircleBuffer2n<T>,
+    parent: &'a DyadicRingBuffer<T>,
     posn: usize,
 }
 impl<'a, T: Default + Copy> Iterator for Iter<'a, T> {
@@ -152,7 +152,7 @@ impl<'a, T: Default + Copy> ExactSizeIterator for IterMut<'a, T> {
     }
 }
 
-impl<'a, T: Default + Copy> IntoIterator for &'a CircleBuffer2n<T> {
+impl<'a, T: Default + Copy> IntoIterator for &'a DyadicRingBuffer<T> {
     type Item = T;
     type IntoIter = Iter<'a, T>;
     fn into_iter(self) -> Iter<'a, T> {
@@ -166,22 +166,22 @@ mod tests {
 
     #[test]
     fn sizes() {
-        let buff = CircleBuffer2n::<usize>::new(8).expect("should allocate");
+        let buff = DyadicRingBuffer::<usize>::new(8).expect("should allocate");
         assert_eq!(buff.n, 8);
         assert_eq!(buff.len, buff.data.len());
         assert_eq!(buff.len, 2_usize.pow(8));
 
-        let buff = CircleBuffer2n::<usize>::new(0).expect("should allocate");
+        let buff = DyadicRingBuffer::<usize>::new(0).expect("should allocate");
         assert_eq!(buff.n, 0);
         assert_eq!(buff.len, buff.data.len());
         assert_eq!(buff.len, 2_usize.pow(0));
 
-        assert!(CircleBuffer2n::<usize>::new(24).is_none());
+        assert!(DyadicRingBuffer::<usize>::new(24).is_none());
     }
 
     #[test]
     fn iter() {
-        let mut buff = CircleBuffer2n::new(3).expect("should allocate");
+        let mut buff = DyadicRingBuffer::new(3).expect("should allocate");
         for i in 0..10 {
             buff.push(i);
         }
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn last_n() {
-        let mut buff = CircleBuffer2n::new(16).expect("should allocate");
+        let mut buff = DyadicRingBuffer::new(16).expect("should allocate");
         for i in 0..buff.len() {
             buff.push(i);
         }
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     #[allow(clippy::cast_precision_loss)]
     fn iter_mut() {
-        let mut buff = CircleBuffer2n::new(10).expect("should allocate");
+        let mut buff = DyadicRingBuffer::new(10).expect("should allocate");
         for i in 0..1024 {
             buff.push(i as f32);
         }
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     #[allow(clippy::cast_precision_loss)]
     fn size_hint() {
-        let mut buff = CircleBuffer2n::new(10).expect("should allocate");
+        let mut buff = DyadicRingBuffer::new(10).expect("should allocate");
         for i in 0..1024 {
             buff.push(i as f32);
         }

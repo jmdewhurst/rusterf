@@ -19,16 +19,11 @@ use chrono::Local;
 
 use librp_sys::dpin;
 use librp_sys::generator::{DCChannel, PulseChannel};
-use librp_sys::oscilloscope::Oscilloscope;
 use librp_sys::Pitaya;
 use librp_sys::{core, oscilloscope};
 
-mod multifit;
-
-use rusterf::circle_buffer::CircleBuffer2n;
 use rusterf::configs;
-use rusterf::interferometer::Interferometer;
-use rusterf::multifit::{sinusoid, wrapped_angle_difference, FitSetup};
+use rusterf::multifit;
 
 // mod lib;
 // use lib::laser::Laser;
@@ -114,6 +109,10 @@ async fn main() {
                 };
         }
     };
+    interf
+        .ramp_setup
+        .apply(&mut pit.scope, ramp_ch.as_mut(), &mut slave_out_ch)
+        .expect("failed to apply ramp settings");
 
     pit.scope
         .start_acquisition()

@@ -2,7 +2,7 @@
 
 use std::f32::consts::PI;
 
-use super::circle_buffer::CircleBuffer2n;
+use super::ring_buffer::DyadicRingBuffer;
 
 use librp_sys::core;
 
@@ -14,8 +14,8 @@ pub struct Laser {
     pub output_channel: Option<core::Channel>,
     pub fit_coefficients: [f32; 4],
     fringe_freq: f32,
-    pub phase_log: CircleBuffer2n<f32>,
-    pub feedback_log: CircleBuffer2n<f32>,
+    pub phase_log: DyadicRingBuffer<f32>,
+    pub feedback_log: DyadicRingBuffer<f32>,
 }
 
 impl Laser {
@@ -27,8 +27,8 @@ impl Laser {
             output_channel: None,
             fringe_freq: 1.0,
             fit_coefficients: [0.0, 0.0, 0.0, 0.0],
-            phase_log: CircleBuffer2n::new(n)?,
-            feedback_log: CircleBuffer2n::new(n)?,
+            phase_log: DyadicRingBuffer::new(n)?,
+            feedback_log: DyadicRingBuffer::new(n)?,
         })
     }
 
@@ -67,8 +67,8 @@ impl Laser {
     /// pair of buffers
     #[allow(clippy::result_unit_err)]
     pub fn resize_logs(&mut self, n_new: usize) -> Result<(), ()> {
-        let mut new_phase = CircleBuffer2n::new(n_new).ok_or(())?;
-        let mut new_feedback = CircleBuffer2n::new(n_new).ok_or(())?;
+        let mut new_phase = DyadicRingBuffer::new(n_new).ok_or(())?;
+        let mut new_feedback = DyadicRingBuffer::new(n_new).ok_or(())?;
         new_phase.extend(&self.phase_log);
         new_feedback.extend(&self.feedback_log);
         self.phase_log = new_phase;
