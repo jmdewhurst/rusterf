@@ -129,50 +129,57 @@ impl Servo {
     pub fn error_feedback(&self) -> f32 {
         self.error_feedback
     }
-    pub fn process_command(&mut self, cmd: Split<'_, char>) -> Result<Option<String>, ()> {
-        match cmd.collect::<Vec<&str>>()[..] {
+
+    /// Takes a split over a string command, parses the command, executes the command, and returns
+    /// a string
+    /// # Errors
+    /// In case of an invalid command (or inability to parse a command), returns an
+    #[allow(clippy::result_unit_err)]
+    pub fn process_command(&mut self, cmd: Split<'_, char>) -> Result<String, ()> {
+        let resp = match cmd.collect::<Vec<&str>>()[..] {
             ["GAIN_P", "SET", x] => {
-                self.gain_P = x.parse::<f32>().map_err(|_| ())?;
-                Ok(None)
+                self.gain_P = x.parse::<f32>().or(Err(()))?;
+                String::new()
             }
-            ["GAIN_P", "GET"] => Ok(Some(self.gain_P.to_string())),
+            ["GAIN_P", "GET"] => self.gain_P.to_string(),
             ["GAIN_I", "SET", x] => {
-                self.gain_I = x.parse::<f32>().map_err(|_| ())?;
+                self.gain_I = x.parse::<f32>().or(Err(()))?;
                 self.reset_integral();
-                Ok(None)
+                String::new()
             }
-            ["GAIN_I", "GET"] => Ok(Some(self.gain_I.to_string())),
+            ["GAIN_I", "GET"] => self.gain_I.to_string(),
             ["GAIN_D", "SET", x] => {
-                self.gain_D = x.parse::<f32>().map_err(|_| ())?;
-                Ok(None)
+                self.gain_D = x.parse::<f32>().or(Err(()))?;
+                String::new()
             }
-            ["GAIN_D", "GET"] => Ok(Some(self.gain_D.to_string())),
+            ["GAIN_D", "GET"] => self.gain_D.to_string(),
             ["ALPHA_I", "SET", x] => {
-                self.set_alpha_I(x.parse::<f32>().map_err(|_| ())?);
-                Ok(None)
+                self.set_alpha_I(x.parse::<f32>().or(Err(()))?);
+                String::new()
             }
-            ["ALPHA_I", "GET"] => Ok(Some(self.alpha_I().to_string())),
+            ["ALPHA_I", "GET"] => self.alpha_I().to_string(),
             ["SETPOINT", "SET", x] => {
-                self.set_setpoint(x.parse::<f32>().map_err(|_| ())?);
-                Ok(None)
+                self.set_setpoint(x.parse::<f32>().or(Err(()))?);
+                String::new()
             }
-            ["SETPOINT", "GET"] => Ok(Some(self.setpoint().to_string())),
+            ["SETPOINT", "GET"] => self.setpoint().to_string(),
             ["MODE", "SET", "ENABLE"] => {
                 self.enable();
-                Ok(None)
+                String::new()
             }
             ["MODE", "SET", "DISABLE"] => {
                 self.disable();
-                Ok(None)
+                String::new()
             }
-            ["MODE", "GET"] => Ok(Some(self.mode.to_string())),
+            ["MODE", "GET"] => self.mode.to_string(),
             ["MAX_STEP_SIZE", "SET", x] => {
-                self.max_feedback_step_size = x.parse::<f32>().map_err(|_| ())?;
-                Ok(None)
+                self.max_feedback_step_size = x.parse::<f32>().or(Err(()))?;
+                String::new()
             }
-            ["MAX_STEP_SIZE", "GET"] => Ok(Some(self.max_feedback_step_size.to_string())),
-            _ => Err(()),
-        }
+            ["MAX_STEP_SIZE", "GET"] => self.max_feedback_step_size.to_string(),
+            _ => Err(())?,
+        };
+        Ok(resp)
     }
 }
 

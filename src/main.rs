@@ -13,12 +13,9 @@ use std::thread::spawn;
 use std::time::Instant;
 use std::{env, thread, time};
 
-use rand::distributions::{Distribution, Uniform};
+// use rand::distributions::{Distribution, Uniform};
 
 use chrono::Local;
-// extern crate toml;
-// use rayon::join;
-// use zeromq;
 
 use librp_sys::dpin;
 use librp_sys::generator::{DCChannel, PulseChannel};
@@ -26,10 +23,15 @@ use librp_sys::oscilloscope::Oscilloscope;
 use librp_sys::Pitaya;
 use librp_sys::{core, oscilloscope};
 
+mod multifit;
+
 use rusterf::circle_buffer::CircleBuffer2n;
 use rusterf::configs;
 use rusterf::interferometer::Interferometer;
-use rusterf::multifit;
+use rusterf::multifit::{sinusoid, wrapped_angle_difference, FitSetup};
+
+// mod lib;
+// use lib::laser::Laser;
 
 macro_rules! data_ch {
     ($laser:expr, $pit:ident) => {
@@ -41,6 +43,7 @@ macro_rules! data_ch {
 }
 
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::cast_possible_truncation)]
 #[async_std::main]
 async fn main() {
     let mut pit = Pitaya::init().expect("Failed to intialize the Red Pitaya!");
@@ -119,12 +122,12 @@ async fn main() {
 
     let mut triggered: Instant;
     let mut fit_started: Instant;
-    let mut total_fitting_time_us: usize = 0;
+    let mut total_fitting_time_us: u32 = 0;
 
-    // let rayon_pool = rayon::ThreadPoolBuilder::new()
-    //     .num_threads(2)
-    //     .build()
-    //     .unwrap();
+    let rayon_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .unwrap();
 
     println!("Entering main loop...");
     loop {
@@ -137,7 +140,8 @@ async fn main() {
                 };
             }
         } else {
-            pit.dpin
+            let _ = pit
+                .dpin
                 .set_direction(ready_to_acquire_pin, dpin::PinDirection::In);
         }
 
@@ -149,7 +153,8 @@ async fn main() {
         }
 
         if !interf.is_master() {
-            pit.dpin
+            let _ = pit
+                .dpin
                 .set_state(ready_to_acquire_pin, dpin::PinState::High);
         }
 
@@ -173,48 +178,41 @@ async fn main() {
                 break;
             };
         }
-        pit.scope.update_scope_data_both();
+        let _ = pit.scope.update_scope_data_both();
         if interf.is_master() {
-            pit.dpin.set_state(trigger_pin, dpin::PinState::High);
+            let _ = pit.dpin.set_state(trigger_pin, dpin::PinState::High);
         }
 
         fit_started = Instant::now();
-        let (ref_result, slave_result) = thread::scope(|s| {
-            let ref_handle = s.spawn(|| {
-                interf.fit_setup_ref.fit(
-                    data_ch!(interf.ref_laser, pit).as_slice(),
-                    interf.ref_laser.fit_coefficients,
-                )
-            });
-            let slave_handle = s.spawn(|| {
-                interf.fit_setup_slave.fit(
-                    data_ch!(interf.slave_laser, pit).as_slice(),
-                    interf.slave_laser.fit_coefficients,
-                )
-            });
-            (
-                ref_handle
-                    .join()
-                    .expect("Panicked during fitting of reference waveform"),
-                slave_handle
-                    .join()
-                    .expect("Panicked during fitting of reference waveform"),
-            )
-        });
-        // let (ref_result, slave_result) = rayon_pool.join(
-        //     || {
+        // let (ref_result, slave_result) = thread::scope(|s| {
+        //     let ref_handle = s.spawn(|| {
         //         interf.fit_setup_ref.fit(
         //             data_ch!(interf.ref_laser, pit).as_slice(),
         //             interf.ref_laser.fit_coefficients,
         //         )
-        //     },
-        //     || {
+        //     });
+        //     let slave_handle = s.spawn(|| {
         //         interf.fit_setup_slave.fit(
         //             data_ch!(interf.slave_laser, pit).as_slice(),
         //             interf.slave_laser.fit_coefficients,
         //         )
-        //     },
-        // );
+        //     });
+        //     (ref_handle.join().unwrap(), slave_handle.join().unwrap())
+        // });
+        let (ref_result, slave_result) = rayon_pool.join(
+            || {
+                interf.fit_setup_ref.fit(
+                    data_ch!(interf.ref_laser, pit).as_slice(),
+                    interf.ref_laser.fit_coefficients,
+                )
+            },
+            || {
+                interf.fit_setup_slave.fit(
+                    data_ch!(interf.slave_laser, pit).as_slice(),
+                    interf.slave_laser.fit_coefficients,
+                )
+            },
+        );
         // let ref_result = interf.fit_setup_ref.fit(
         //     data_ch!(interf.ref_laser, pit).as_slice(),
         //     interf.ref_laser.fit_coefficients,
@@ -224,7 +222,7 @@ async fn main() {
         //     data_ch!(interf.slave_laser, pit).as_slice(),
         //     interf.slave_laser.fit_coefficients,
         // );
-        total_fitting_time_us += fit_started.elapsed().as_micros() as usize;
+        total_fitting_time_us += fit_started.elapsed().as_micros() as u32;
         // println!(
         //     "[{}] fitting time {} us",
         //     Local::now(),
@@ -251,7 +249,7 @@ async fn main() {
         let slave_adjustment = interf.slave_lock.do_pid(slave_error);
 
         if ramp_ch.is_some() {
-            ramp_ch.as_mut().unwrap().increment_offset(ref_adjustment);
+            let _ = ramp_ch.as_mut().unwrap().increment_offset(ref_adjustment);
         }
         slave_out_ch.increment_offset(slave_adjustment);
 
@@ -266,12 +264,33 @@ async fn main() {
             .feedback_log
             .push(slave_out_ch.offset_v());
 
-        pit.scope.start_acquisition();
-        pit.scope
+        let _ = pit.scope.start_acquisition();
+        let _ = pit
+            .scope
             .set_trigger_source(oscilloscope::TrigSrc::ExtRising);
 
+        if interf_comms.should_publish_logs(interf.cycle_counter + 4) {
+            // Ideally we'd always send the most recent waveform, but we handle communications
+            // while the scope is acquiring, i.e. while the most recent waveform is being written in
+            // memory. Instead, we have to copy the waveform ahead of time, but this large of a
+            // memory operation can take a few milliseconds, which slightly distorts the next
+            // waveform acquired. So we copy the waveform a few cycles ahead of our next
+            // communications event, so in effect when we publish a 'most recent waveform', it's
+            // actually a few cycles out of date.
+            let _ = match interf.ref_laser.input_channel {
+                core::Channel::CH_1 => pit.scope.write_raw_waveform(
+                    &mut interf.last_waveform_ref,
+                    &mut interf.last_waveform_slave,
+                ),
+                core::Channel::CH_2 => pit.scope.write_raw_waveform(
+                    &mut interf.last_waveform_slave,
+                    &mut interf.last_waveform_ref,
+                ),
+            };
+        }
+
         loop {
-            if triggered.elapsed().as_micros() as i64
+            if triggered.elapsed().as_micros() as u64
                 > (interf.ramp_setup.ramp_period_us() + interf.ramp_setup.piezo_settle_time_us())
             {
                 break;

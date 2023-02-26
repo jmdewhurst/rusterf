@@ -21,8 +21,8 @@ pub struct DaqSetup {
     pub amplitude_volts: f32,
     pub piezo_scale_factor: f32, // units of nm / Volt
     pub piezo_settle_time_ms: f32,
-    ramp_period_us: i64,
-    piezo_settle_time_us: i64,
+    ramp_period_us: u64,
+    piezo_settle_time_us: u64,
 }
 
 impl DaqSetup {
@@ -80,7 +80,7 @@ impl DaqSetup {
         self.decimation = decimation;
         self.ramp_period_s =
             (16384.0 / ADC_SAMPLE_RATE / (self.decimation as f64) / self.symmetry as f64) as f32;
-        self.ramp_period_us = (self.ramp_period_s * 1.0e6) as i64;
+        self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
         self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1e-9) as u128;
         self
     }
@@ -98,12 +98,12 @@ impl DaqSetup {
     }
     #[inline]
     #[must_use]
-    pub fn ramp_period_us(&self) -> i64 {
+    pub fn ramp_period_us(&self) -> u64 {
         self.ramp_period_us
     }
     #[inline]
     #[must_use]
-    pub fn piezo_settle_time_us(&self) -> i64 {
+    pub fn piezo_settle_time_us(&self) -> u64 {
         self.piezo_settle_time_us
     }
 
@@ -111,7 +111,7 @@ impl DaqSetup {
         self.symmetry = symm;
         self.ramp_period_s =
             (16384.0 / ADC_SAMPLE_RATE / (self.decimation as f64) / self.symmetry as f64) as f32;
-        self.ramp_period_us = (self.ramp_period_s * 1.0e6) as i64;
+        self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
         self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1e-9) as u128;
         self
     }
@@ -124,10 +124,10 @@ impl DaqSetup {
     #[allow(clippy::cast_possible_truncation)]
     pub fn piezo_settle_time_ms(&mut self, time_ms: f32) -> &mut Self {
         self.piezo_settle_time_ms = time_ms;
-        self.piezo_settle_time_us = (time_ms * 1000.0) as i64;
+        self.piezo_settle_time_us = (time_ms * 1000.0) as u64;
         self.ramp_period_s =
             (16384.0 / ADC_SAMPLE_RATE / (self.decimation as f64) / self.symmetry as f64) as f32;
-        self.ramp_period_us = (self.ramp_period_s * 1.0e6) as i64;
+        self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
         self
     }
 

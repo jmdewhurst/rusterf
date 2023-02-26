@@ -102,6 +102,7 @@ pub fn dpin_from_config(cfg: &toml::Value, dpin: &mut DigitalPin) -> Result<(), 
         .map_err(|_| "failed to get hostname")?;
     let hostname = hostname.as_str();
     let is_master = tomlget!(cfg, hostname, "is_master", as_bool);
+    dpin.set_all_input().expect("RP API call failure");
     if is_master {
         dpin.set_direction(dpin_get_trigger_pin(cfg)?, dpin::PinDirection::Out)
             .expect("RP API call failure");
@@ -224,8 +225,7 @@ pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
 
     let buffer_size_exponent = buff_size_exponent(cfg);
 
-    let mut out =
-        Laser::new(buffer_size_exponent as usize).ok_or("failed to instantiate laser struct")?;
+    let mut out = Laser::new(buffer_size_exponent).ok_or("failed to instantiate laser struct")?;
     out.set_wavelength(
         tomlget!(cfg, "ref_laser", "wavelength_nm", as_float, f32),
         tomlget!(cfg, "ramp", "piezo_scale_factor", as_float, f32),
@@ -264,8 +264,7 @@ pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     let slave_laser_name = tomlget!(cfg, hostname, "slave_laser", as_str);
     let buffer_size_exponent = buff_size_exponent(cfg);
 
-    let mut out =
-        Laser::new(buffer_size_exponent as usize).ok_or("failed to instantiate laser struct")?;
+    let mut out = Laser::new(buffer_size_exponent).ok_or("failed to instantiate laser struct")?;
     out.set_wavelength(
         tomlget!(cfg, slave_laser_name, "wavelength_nm", as_float, f32),
         tomlget!(cfg, "ramp", "piezo_scale_factor", as_float, f32),

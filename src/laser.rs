@@ -65,6 +65,7 @@ impl Laser {
     /// # Errors
     /// Returns Ok(()) if the resize went through; returns Err(()) if it failed to initialize a new
     /// pair of buffers
+    #[allow(clippy::result_unit_err)]
     pub fn resize_logs(&mut self, n_new: usize) -> Result<(), ()> {
         let mut new_phase = CircleBuffer2n::new(n_new).ok_or(())?;
         let mut new_feedback = CircleBuffer2n::new(n_new).ok_or(())?;

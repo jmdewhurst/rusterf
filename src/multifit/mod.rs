@@ -1,5 +1,6 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::similar_names)]
+#![allow(dead_code)]
 
 use std::f32::consts::PI;
 use std::ffi::{c_char, c_int, CStr};

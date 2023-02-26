@@ -1,6 +1,5 @@
 /target
 */target/
-Cargo.toml
 RedPitaya/
 gsl-*.*.tar.gz
 gsl-*.*/ 

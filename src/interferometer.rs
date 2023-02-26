@@ -1,4 +1,5 @@
 #![warn(clippy::pedantic)]
+#![allow(clippy::result_unit_err)]
 
 use std::str::Split;
 
@@ -64,6 +65,9 @@ impl Interferometer {
         self.slave_lock.reset_integral();
     }
 
+    /// Copy the data from the Red Pitaya's internal oscilloscope buffer into the buffers of `self`.
+    /// # Errors
+    /// Propagates any Red Pitaya API errors
     pub fn update_last_waveforms(&mut self, osc: &mut Oscilloscope) -> APIResult<()> {
         match self.ref_laser.input_channel {
             Channel::CH_1 => {
@@ -76,57 +80,61 @@ impl Interferometer {
         Ok(())
     }
 
-    fn process_ramp_command(&mut self, cmd: Split<'_, char>) -> Result<Option<String>, ()> {
-        match cmd.collect::<Vec<&str>>()[..] {
+    fn process_ramp_command(&mut self, cmd: Split<'_, char>) -> Result<String, ()> {
+        let resp = match cmd.collect::<Vec<&str>>()[..] {
             ["AMPL", "SET", x] => {
-                self.ramp_setup.amplitude(x.parse::<f32>().map_err(|_| ())?);
+                self.ramp_setup.amplitude(x.parse::<f32>().or(Err(()))?);
                 self.update_fringe_params();
-                Ok(None)
+                String::new()
             }
-            ["AMPL", "GET"] => Ok(Some(self.ramp_setup.amplitude_volts.to_string())),
+            ["AMPL", "GET"] => self.ramp_setup.amplitude_volts.to_string(),
             ["SCALE_FACTOR", "SET", x] => {
-                self.ramp_setup.piezo_scale_factor = x.parse::<f32>().map_err(|_| ())?;
+                self.ramp_setup.piezo_scale_factor = x.parse::<f32>().or(Err(()))?;
                 self.update_fringe_params();
-                Ok(None)
+                String::new()
             }
-            ["SCALE_FACTOR", "GET"] => Ok(Some(self.ramp_setup.piezo_scale_factor.to_string())),
+            ["SCALE_FACTOR", "GET"] => self.ramp_setup.piezo_scale_factor.to_string(),
             ["SETTLE_TIME", "SET", x] => {
                 self.ramp_setup
-                    .piezo_settle_time_ms(x.parse::<f32>().map_err(|_| ())?);
-                Ok(None)
+                    .piezo_settle_time_ms(x.parse::<f32>().or(Err(()))?);
+                String::new()
             }
-            ["SETTLE_TIME", "GET"] => Ok(Some(self.ramp_setup.piezo_settle_time_ms.to_string())),
-            _ => Err(()),
-        }
+            ["SETTLE_TIME", "GET"] => self.ramp_setup.piezo_settle_time_ms.to_string(),
+            _ => Err(())?,
+        };
+        Ok(resp)
     }
 
-    fn process_laser_command(&mut self, cmd: Split<'_, char>) -> Result<Option<String>, ()> {
-        match cmd.collect::<Vec<&str>>()[..] {
+    fn process_laser_command(&mut self, cmd: Split<'_, char>) -> Result<String, ()> {
+        let resp = match cmd.collect::<Vec<&str>>()[..] {
             ["REF", "WAVELENGTH", "SET", x] => {
                 self.ref_laser.set_wavelength(
-                    x.parse::<f32>().map_err(|_| ())?,
+                    x.parse::<f32>().or(Err(()))?,
                     self.ramp_setup.piezo_scale_factor,
                     self.ramp_setup.amplitude_volts,
                 );
-                Ok(None)
+                String::new()
             }
-            ["REF", "WAVELENGTH", "GET"] => Ok(Some(self.ref_laser.wavelength_nm().to_string())),
+            ["REF", "WAVELENGTH", "GET"] => self.ref_laser.wavelength_nm().to_string(),
             ["SLAVE", "WAVELENGTH", "SET", x] => {
                 self.slave_laser.set_wavelength(
-                    x.parse::<f32>().map_err(|_| ())?,
+                    x.parse::<f32>().or(Err(()))?,
                     self.ramp_setup.piezo_scale_factor,
                     self.ramp_setup.amplitude_volts,
                 );
-                Ok(None)
+                String::new()
             }
-            ["SLAVE", "WAVELENGTH", "GET"] => {
-                Ok(Some(self.slave_laser.wavelength_nm().to_string()))
-            }
-            _ => Err(()),
-        }
+            ["SLAVE", "WAVELENGTH", "GET"] => self.slave_laser.wavelength_nm().to_string(),
+            _ => Err(())?,
+        };
+        Ok(resp)
     }
 
-    pub fn process_command(&mut self, mut cmd: Split<'_, char>) -> Result<Option<String>, ()> {
+    /// Handle an incoming command by routing it to the appropriate sufunction. Returns a String
+    /// holding the response to the sender of the command.
+    /// # Errors
+    /// Returns `Err(())` in case of a failure to parse a valid top-level command in `cmd`
+    pub fn process_command(&mut self, mut cmd: Split<'_, char>) -> Result<String, ()> {
         match cmd.next() {
             Some("RAMP") => self.process_ramp_command(cmd),
             Some("LASER") => self.process_laser_command(cmd),

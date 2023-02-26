@@ -126,4 +126,18 @@ impl DigitalPin {
         )?;
         Ok(unsafe { PinState::from_u32(pin_state).unwrap_unchecked() })
     }
+
+    pub fn set_all_input(&mut self) -> Result<(), Vec<APIError>> {
+        let mut errs = Vec::new();
+        for i in 8..24 {
+            if let Err(e) = self.set_direction(Pin::from_u32(i).unwrap(), PinDirection::In) {
+                errs.push(e);
+            }
+        }
+        if errs.is_empty() {
+            Ok(())
+        } else {
+            Err(errs)
+        }
+    }
 }

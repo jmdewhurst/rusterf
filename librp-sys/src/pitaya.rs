@@ -58,6 +58,10 @@ impl Pitaya {
 
     #[cfg(any(feature = "no_api", feature = "no_api_loud"))]
     pub fn init() -> Result<Self, InitializationError> {
+        println!("librp-sys running in no-api mode; calls to librp functionality will be omitted");
+        if !cfg!(feature = "no_api_loud") {
+            println!("running in no-api quiet; no further api call statements will be emitted");
+        }
         rp::core_mock_init();
         Ok(Pitaya {
             scope: Oscilloscope::init(),
