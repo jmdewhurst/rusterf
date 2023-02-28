@@ -72,7 +72,7 @@ impl InterfComms {
     #[inline]
     #[must_use]
     pub fn should_publish_logs(&self, num_cycles: u64) -> bool {
-        (num_cycles >> self.logs_publish_frequency_exponent) == 0
+        (num_cycles & ((1 << self.logs_publish_frequency_exponent) - 1)) == 0
     }
 
     pub async fn handle_socket_request(&mut self, interf: &mut Interferometer) -> Option<String> {

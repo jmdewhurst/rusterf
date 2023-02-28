@@ -46,13 +46,13 @@ fn cargo_messages(out_dir: &str) {
     println!("cargo:rustc-link-lib=m");
     // println!("cargo:rustc-link-lib=gsl");
     // println!("cargo:rustc-link-lib=gslcblas");
-    if cfg!(target = "armv7-unknown-linux-gnueabihf") {
-        println!("cargo:rustc-link-lib=static=gsl");
-        println!("cargo:rustc-link-lib=static=gslcblas");
-    } else {
-        println!("cargo:rustc-link-lib=gsl");
-        println!("cargo:rustc-link-lib=gslcblas");
-    }
+    // if cfg!(target = "armv7-unknown-linux-gnueabihf") {
+    println!("cargo:rustc-link-lib=static=gsl");
+    println!("cargo:rustc-link-lib=static=gslcblas");
+    // } else {
+    //     println!("cargo:rustc-link-lib=gsl");
+    //     println!("cargo:rustc-link-lib=gslcblas");
+    // }
 }
 
 fn gsl(out_dir: &str, target: &str) {

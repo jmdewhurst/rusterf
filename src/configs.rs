@@ -79,7 +79,7 @@ pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(
     );
     gen.ch_a
         .set_trigger_source(librp_sys::generator::GenTriggerSource::ExternalRisingEdge);
-    gen.ch_a.enable();
+    // gen.ch_a.enable();
     gen.ch_b.set_hw_offset_v(tomlget!(
         cfg,
         hostname,
@@ -95,7 +95,7 @@ pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(
     );
     gen.ch_b
         .set_trigger_source(librp_sys::generator::GenTriggerSource::ExternalRisingEdge);
-    gen.ch_b.enable();
+    // gen.ch_b.enable();
     Ok(())
 }
 
@@ -201,6 +201,9 @@ pub fn ramp_from_config(cfg: &toml::Value) -> Result<DaqSetup, String> {
         eprintln!("Decimation factor specified in config file as {}. Valid decimation factors are 1, 2, 4, 8, or any value between 16 and 65536. Proceeding with decimation factor of {}", dec, dec_factor);
     }
     out.set_decimation(dec_factor);
+
+    out.set_symmetry(tomlget!(cfg, "ramp", "symmetry_factor", as_float, f32).clamp(0.01, 0.99));
+
     Ok(out)
 }
 

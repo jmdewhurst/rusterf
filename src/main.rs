@@ -42,6 +42,9 @@ macro_rules! data_ch {
 #[async_std::main]
 async fn main() {
     let mut pit = Pitaya::init().expect("Failed to intialize the Red Pitaya!");
+    pit.gen
+        .reset()
+        .expect("Failed to reset rp function generator");
 
     let path_base = env::current_exe().expect("Failed to get the path to this program");
     println!(
@@ -87,9 +90,11 @@ async fn main() {
         .expect("Failed to set up Digital IO pins from config file");
     let ready_to_acquire_pin = configs::dpin_get_ready_pin(&cfg).expect("already set up pins");
     let trigger_pin = configs::dpin_get_trigger_pin(&cfg).expect("already set up pins");
-    pit.dpin
-        .set_state(trigger_pin, dpin::PinState::Low)
-        .expect("API call should succeed");
+    if interf.is_master() {
+        pit.dpin
+            .set_state(trigger_pin, dpin::PinState::Low)
+            .expect("API call should succeed");
+    }
 
     let mut ramp_ch;
     let mut slave_out_ch;
@@ -134,6 +139,9 @@ async fn main() {
     pit.scope
         .start_acquisition()
         .expect("Failed to start data acquisition");
+    let _ = pit
+        .scope
+        .set_trigger_source(oscilloscope::TrigSrc::ExtRising);
     thread::sleep(time::Duration::from_millis(50));
 
     let mut triggered: Instant;
@@ -153,14 +161,15 @@ async fn main() {
 
     let last_ref_result: Option<multifit::FitResult> = None;
     let last_slave_result: Option<multifit::FitResult> = None;
-    println!(
-        "pin {ready_to_acquire_pin:?} in state {:?}",
-        pit.dpin.get_state(ready_to_acquire_pin).unwrap()
-    );
 
+    println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
     loop {
         interf.cycle_counter += 1;
+
+        if interf.is_master() {
+            interf.ref_lock.enable();
+        }
 
         if interf.is_master() {
             loop {
@@ -178,12 +187,14 @@ async fn main() {
         loop {
             if let Ok(oscilloscope::TrigState::Triggered) = pit.scope.get_trigger_state() {
                 triggered = Instant::now();
-                println!("triggered");
                 break;
             };
         }
 
         if !interf.is_master() {
+            let _ = pit
+                .dpin
+                .set_direction(ready_to_acquire_pin, dpin::PinDirection::Out);
             let _ = pit
                 .dpin
                 .set_state(ready_to_acquire_pin, dpin::PinState::High);
@@ -366,11 +377,11 @@ async fn main() {
             if triggered.elapsed().as_micros() as u64
                 > (interf.ramp_setup.ramp_period_us() + interf.ramp_setup.piezo_settle_time_us())
             {
-                println!(
-                    "elapsed time: {} us vs settle time {} us",
-                    triggered.elapsed().as_micros() as u64,
-                    interf.ramp_setup.piezo_settle_time_us()
-                );
+                // println!(
+                //     "elapsed time: {} us vs ramp + settle {} us",
+                //     triggered.elapsed().as_micros() as u64,
+                //     interf.ramp_setup.ramp_period_us() + interf.ramp_setup.piezo_settle_time_us()
+                // );
                 break;
             }
         }

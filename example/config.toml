@@ -15,6 +15,7 @@ piezo_scale_factor = 3474.9457343334234
 piezo_settle_time_ms = 1.0e3
 amplitude_volts = 1.0
 decimation_factor = 16
+symmetry_factor = 0.8
 
 [multifit]
 samples_skip_start = 6500

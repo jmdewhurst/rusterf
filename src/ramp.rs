@@ -55,10 +55,12 @@ impl DaqSetup {
         let steps_up = (16384.0 * self.symmetry) as u16;
         let mut waveform = Vec::<f32>::with_capacity(16384);
         for i in 0..steps_up {
-            waveform.push(-0.5 * (i as f32) / (steps_up as f32));
+            waveform.push(1.0 * (i as f32) / (steps_up as f32) - 0.5);
         }
         for i in steps_up..16384 {
-            waveform.push(f32::cos(PI * (i as f32) / (16384 - steps_up) as f32) / 2.0);
+            waveform.push(
+                0.5 * f32::cos(PI * (i as f32 - steps_up as f32) / (16384 - steps_up) as f32),
+            );
         }
 
         osc.set_decimation(self.decimation)?;
@@ -83,7 +85,7 @@ impl DaqSetup {
         self.ramp_period_s =
             (16384.0 * (self.decimation as f64) / ADC_SAMPLE_RATE / self.symmetry as f64) as f32;
         self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
-        self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1e-9) as u128;
+        self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1.0e9) as u128;
         self
     }
 
@@ -114,7 +116,7 @@ impl DaqSetup {
         self.ramp_period_s =
             (16384.0 * (self.decimation as f64) / ADC_SAMPLE_RATE / self.symmetry as f64) as f32;
         self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
-        self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1e-9) as u128;
+        self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1.0e9) as u128;
         self
     }
     #[inline]

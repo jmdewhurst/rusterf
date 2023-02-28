@@ -11,6 +11,8 @@ use crate::core;
 use crate::core::{APIError, APIError::RP_OK, APIResult};
 use enum_primitive::*;
 use std::ffi::c_int;
+use std::thread;
+use std::time::Duration;
 // use std::mem::MaybeUninit;
 
 enum_from_primitive! {
@@ -44,7 +46,7 @@ enum_from_primitive! {
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub enum GenTriggerSource {
-        Internal = 0,
+        Internal = 1,
         ExternalRisingEdge, // External trigger is on DIO0_P; this is not configurable
         ExternalFallingEdge,
 }
@@ -265,6 +267,10 @@ impl Generator {
             },
         }
     }
+
+    pub fn reset(&self) -> APIResult<()> {
+        wrap_call!(rp_GenReset)
+    }
 }
 
 impl<'a> DCChannel<'a> {
@@ -316,6 +322,7 @@ impl<'a> PulseChannel<'a> {
         ch.set_offset_v((ch.max_output_v - ch.min_output_v) / 2.0);
         ch.set_burst_last_value((ch.ampl_v * last_value) + ch.offset_v);
         let _ = ch.set_amplitude_v(ampl_volts);
+        ch.set_trigger_source(GenTriggerSource::ExternalRisingEdge);
         Ok(PulseChannel {
             ch,
             waveform_last_value: last_value,
@@ -345,8 +352,9 @@ impl<'a> PulseChannel<'a> {
     /// Disables the channel in question, then sets the given waveform. IMPORTANT: in order to use
     /// the channel after this, you must call `.enable()` on it.
     pub fn set_waveform(&mut self, waveform: &mut [f32]) -> APIResult<()> {
-        self.ch.disable()?;
+        // self.ch.disable()?;
         self.ch.set_arb_waveform(waveform)?;
+        thread::sleep(Duration::from_millis(50));
         self.waveform_last_value = waveform[waveform.len() - 1];
         self.set_amplitude(self.ch.ampl_v);
         Ok(())
