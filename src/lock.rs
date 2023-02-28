@@ -78,6 +78,7 @@ impl Servo {
 
     #[inline]
     pub fn enable(&mut self) {
+        self.integral = 0.0;
         self.mode = Mode::Enabled;
     }
 
