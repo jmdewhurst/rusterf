@@ -1,6 +1,5 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::all)]
-extern crate serde;
 
 #[macro_use]
 pub mod core;

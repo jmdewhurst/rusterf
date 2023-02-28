@@ -68,6 +68,11 @@ fn_ok!(
     (num: ::std::os::raw::c_int)
 );
 fn_ok!(
+    rp_GenBurstRepetitions,
+    (core_ch: rp_channel_t),
+    (num: ::std::os::raw::c_int)
+);
+fn_ok!(
     rp_GenBurstLastValue,
     (core_ch: rp_channel_t),
     (amplitude: f32)

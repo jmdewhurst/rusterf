@@ -37,9 +37,13 @@ impl Pitaya {
 
         let status = Command::new("sh")
             // ensure the FPGA image is loaded onto the Red Pitaya -- otherwise the API is nonsense
+            .arg("-c")
             .arg("cat /opt/redpitaya/fpga/fpga_0.94.bit > /dev/xdevcfg")
             .status()
-            .map_err(|_| InitializationError::FAILED_TO_LOAD_FPGA_IMAGE)?;
+            .map_err(|_| {
+                println!("test");
+                InitializationError::FAILED_TO_LOAD_FPGA_IMAGE
+            })?;
         if !status.success() {
             return Err(InitializationError::FAILED_TO_LOAD_FPGA_IMAGE);
         }

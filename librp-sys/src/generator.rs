@@ -152,12 +152,21 @@ impl Channel {
         wrap_call!(rp_GenBurstCount, cch!(self), count as c_int)
     }
 
+    #[inline]
+    pub fn set_burst_repetitions(&mut self, repetitions: i32) -> APIResult<()> {
+        wrap_call!(rp_GenBurstRepetitions, cch!(self), repetitions as c_int)
+    }
+
     /// By default, when the AWG fires a burst of waveforms, it then sets the voltage to 0
     /// after the end of the final waveform. This function sets the voltage the AWG outputs
     /// after finishing the burst.
     #[inline]
     pub fn set_burst_last_value(&mut self, val_volts: f32) -> APIResult<()> {
-        wrap_call!(rp_GenBurstLastValue, cch!(self), val_volts)
+        wrap_call!(
+            rp_GenBurstLastValue,
+            cch!(self),
+            val_volts / self.gain_post - self.hardware_offset_v
+        )
     }
 
     /// Sets the source of the trigger for the AWG. Internal is triggered directly from
@@ -184,6 +193,7 @@ impl Channel {
 
     #[inline]
     pub fn set_output_range(&mut self, min_v: f32, max_v: f32) {
+        //TODO: guanrantee `min_v < max_v` and neither is NaN
         self.min_output_v = min_v;
         self.max_output_v = max_v;
         let _ = self.set_amplitude_v(self.ampl_v);
@@ -206,7 +216,7 @@ impl Channel {
     #[inline]
     #[allow(clippy::float_cmp)]
     pub fn set_amplitude_v(&mut self, ampl_v: f32) -> Result<(), f32> {
-        self.ampl_v = ampl_v.clamp(0.0, 1.0);
+        self.ampl_v = ampl_v.clamp(0.0, 1.0 * self.gain_post);
         let _ = self.set_amplitude_raw(ampl_v / self.gain_post);
         let old_val = self.offset_v;
         let new_val = self.set_offset_v(old_val);
@@ -221,13 +231,13 @@ impl Channel {
     pub fn set_offset_v(&mut self, offset_v: f32) -> f32 {
         // Calling this function with `offset_v == 0.0` should set the 'zero point' of the waveform
         // to halfway between the minimum and maximum allowed values
-        let new_offset = offset_v.clamp(
+        self.offset_v = offset_v.clamp(
             self.min_output_v + self.ampl_v,
             self.max_output_v - self.ampl_v,
         );
-        self.set_offset_raw(new_offset / self.gain_post - self.hardware_offset_v)
+        self.set_offset_raw(self.offset_v / self.gain_post - self.hardware_offset_v)
             .expect("RP API calls shouldn't fail");
-        new_offset
+        self.offset_v
     }
 }
 
@@ -259,10 +269,13 @@ impl Generator {
 
 impl<'a> DCChannel<'a> {
     pub fn init(ch: &'a mut Channel) -> APIResult<Self> {
-        ch.set_waveform_type(WaveformType::DC)?;
-        ch.set_mode(GenMode::Continuous)?;
-        ch.set_amplitude_raw(0.0)?;
-        ch.set_offset_raw(0.0)?;
+        ch.set_waveform_type(WaveformType::Sine)?;
+        let _ = ch.set_amplitude_v(0.0);
+        ch.set_mode(GenMode::Burst)?;
+        ch.set_burst_count(1)?;
+        ch.set_burst_repetitions(1)?;
+        ch.set_offset_v((ch.max_output_v - ch.min_output_v) / 2.0);
+        ch.set_burst_last_value(ch.offset_v)?;
         Ok(DCChannel { ch })
     }
     #[inline]
@@ -276,6 +289,7 @@ impl<'a> DCChannel<'a> {
     #[inline]
     pub fn set_offset(&mut self, offset_v: f32) {
         self.ch.set_offset_v(offset_v);
+        let _ = self.ch.set_burst_last_value(offset_v);
     }
     #[inline]
     #[must_use]
@@ -298,8 +312,10 @@ impl<'a> PulseChannel<'a> {
         ch.set_arb_waveform(&mut waveform)?;
         ch.set_mode(GenMode::Burst)?;
         ch.set_burst_count(1)?;
+        ch.set_burst_repetitions(1)?;
+        ch.set_offset_v((ch.max_output_v - ch.min_output_v) / 2.0);
+        ch.set_burst_last_value((ch.ampl_v * last_value) + ch.offset_v);
         let _ = ch.set_amplitude_v(ampl_volts);
-        let _ = ch.set_offset_raw(0.);
         Ok(PulseChannel {
             ch,
             waveform_last_value: last_value,
@@ -326,10 +342,13 @@ impl<'a> PulseChannel<'a> {
         self.ch.offset_v
     }
 
+    /// Disables the channel in question, then sets the given waveform. IMPORTANT: in order to use
+    /// the channel after this, you must call `.enable()` on it.
     pub fn set_waveform(&mut self, waveform: &mut [f32]) -> APIResult<()> {
         self.ch.disable()?;
         self.ch.set_arb_waveform(waveform)?;
         self.waveform_last_value = waveform[waveform.len() - 1];
+        self.set_amplitude(self.ch.ampl_v);
         Ok(())
     }
     #[inline]
@@ -343,10 +362,9 @@ impl<'a> PulseChannel<'a> {
     }
     #[inline]
     pub fn set_offset(&mut self, volts: f32) -> APIResult<()> {
-        let volts = self.ch.set_offset_v(volts);
-        let last_value_v = (self.ch.ampl_v * self.waveform_last_value) + volts;
+        let volts_checked = self.ch.set_offset_v(volts);
         self.ch
-            .set_burst_last_value(last_value_v / self.ch.gain_post - self.ch.hardware_offset_v)
+            .set_burst_last_value((self.ch.ampl_v * self.waveform_last_value) + volts_checked)
     }
     #[inline]
     pub fn increment_offset(&mut self, volts: f32) -> APIResult<()> {

@@ -63,8 +63,10 @@ async fn main() {
 
     let DO_DEBUG_LOGGING;
     let DEBUG_LOG_FREQ_LOG;
-    if let Some(toml::Value::Integer(freq)) =
-        cfg.get("general").unwrap().get("debug_list_freq_cycles")
+    if let Some(toml::Value::Integer(freq)) = cfg
+        .get("general")
+        .expect("already read in interferometer_from_config")
+        .get("debug_list_freq_cycles")
     {
         DO_DEBUG_LOGGING = true;
         DEBUG_LOG_FREQ_LOG = configs::floor_exp(*freq as u32);
@@ -85,6 +87,9 @@ async fn main() {
         .expect("Failed to set up Digital IO pins from config file");
     let ready_to_acquire_pin = configs::dpin_get_ready_pin(&cfg).expect("already set up pins");
     let trigger_pin = configs::dpin_get_trigger_pin(&cfg).expect("already set up pins");
+    pit.dpin
+        .set_state(trigger_pin, dpin::PinState::Low)
+        .expect("API call should succeed");
 
     let mut ramp_ch;
     let mut slave_out_ch;
@@ -148,6 +153,10 @@ async fn main() {
 
     let last_ref_result: Option<multifit::FitResult> = None;
     let last_slave_result: Option<multifit::FitResult> = None;
+    println!(
+        "pin {ready_to_acquire_pin:?} in state {:?}",
+        pit.dpin.get_state(ready_to_acquire_pin).unwrap()
+    );
 
     println!("Entering main loop...");
     loop {
@@ -156,6 +165,7 @@ async fn main() {
         if interf.is_master() {
             loop {
                 if let Ok(dpin::PinState::Low) = pit.dpin.get_state(ready_to_acquire_pin) {
+                    pit.dpin.set_state(trigger_pin, dpin::PinState::High);
                     break;
                 };
             }
@@ -168,6 +178,7 @@ async fn main() {
         loop {
             if let Ok(oscilloscope::TrigState::Triggered) = pit.scope.get_trigger_state() {
                 triggered = Instant::now();
+                println!("triggered");
                 break;
             };
         }
@@ -240,7 +251,7 @@ async fn main() {
         }
         let _ = pit.scope.update_scope_data_both();
         if interf.is_master() {
-            let _ = pit.dpin.set_state(trigger_pin, dpin::PinState::High);
+            let _ = pit.dpin.set_state(trigger_pin, dpin::PinState::Low);
         }
 
         fit_started = Instant::now();
@@ -355,6 +366,11 @@ async fn main() {
             if triggered.elapsed().as_micros() as u64
                 > (interf.ramp_setup.ramp_period_us() + interf.ramp_setup.piezo_settle_time_us())
             {
+                println!(
+                    "elapsed time: {} us vs settle time {} us",
+                    triggered.elapsed().as_micros() as u64,
+                    interf.ramp_setup.piezo_settle_time_us()
+                );
                 break;
             }
         }

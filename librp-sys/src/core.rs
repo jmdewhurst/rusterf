@@ -5,7 +5,6 @@
 #![warn(clippy::all)]
 #![allow(clippy::wildcard_imports)]
 use enum_primitive::*;
-// use serde::{Deserialize, Serialize};
 
 #[cfg(not(any(feature = "no_api", feature = "no_api_loud")))]
 include!("bindings.rs");
@@ -25,6 +24,30 @@ macro_rules! wrap_call {
 			}
 		}
 }
+// macro_rules! wrap_call {
+//     ($call:ident $(, $arg:expr)* $(,)?) => {
+// 			{
+// 				print!(
+// 					concat!("calling ",  stringify!($call), " "),
+// 				);
+// 				$(
+// 					print!(
+// 						"({:?})",
+// 						$arg
+// 					);
+// 				)*
+// 				println!("");
+// 			{match unsafe {
+// 				APIError::from_i32(core:: $call ($($arg,)* ) )
+// 					.unwrap_unchecked()
+// 				} {
+// 				RP_OK => Ok(()),
+// 				err => Err(err),
+// 				}
+// 			}
+// 			}
+// 		}
+// }
 // pub(crate) use wrap_call;
 
 enum_from_primitive! {

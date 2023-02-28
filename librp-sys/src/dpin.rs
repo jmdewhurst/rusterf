@@ -103,6 +103,7 @@ impl DigitalPin {
     }
 
     pub fn set_direction(&mut self, pin: Pin, dir: PinDirection) -> APIResult<()> {
+        println!("setting pin {pin:?} direction {dir:?}");
         wrap_call!(
             rp_DpinSetDirection,
             pin as core::rp_dpin_t,

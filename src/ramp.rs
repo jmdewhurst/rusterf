@@ -65,8 +65,10 @@ impl DaqSetup {
         if let Some(ref_ch) = ref_ch {
             ref_ch.set_period(self.ramp_period_s)?;
             ref_ch.set_amplitude(self.amplitude_volts)?;
+            ref_ch.set_waveform(&mut waveform);
+            ref_ch.enable()?;
         }
-        slave_ch.set_period(self.ramp_period_s)?;
+        slave_ch.set_period(self.ramp_period_s / 2.0)?;
 
         Ok(())
     }
@@ -79,7 +81,7 @@ impl DaqSetup {
     pub fn set_decimation(&mut self, decimation: u32) -> &mut Self {
         self.decimation = decimation;
         self.ramp_period_s =
-            (16384.0 / ADC_SAMPLE_RATE / (self.decimation as f64) / self.symmetry as f64) as f32;
+            (16384.0 * (self.decimation as f64) / ADC_SAMPLE_RATE / self.symmetry as f64) as f32;
         self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
         self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1e-9) as u128;
         self
@@ -110,7 +112,7 @@ impl DaqSetup {
     pub fn set_symmetry(&mut self, symm: f32) -> &mut Self {
         self.symmetry = symm;
         self.ramp_period_s =
-            (16384.0 / ADC_SAMPLE_RATE / (self.decimation as f64) / self.symmetry as f64) as f32;
+            (16384.0 * (self.decimation as f64) / ADC_SAMPLE_RATE / self.symmetry as f64) as f32;
         self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
         self.rise_time_ns = (self.ramp_period_s * self.symmetry * 1e-9) as u128;
         self
@@ -126,7 +128,7 @@ impl DaqSetup {
         self.piezo_settle_time_ms = time_ms;
         self.piezo_settle_time_us = (time_ms * 1000.0) as u64;
         self.ramp_period_s =
-            (16384.0 / ADC_SAMPLE_RATE / (self.decimation as f64) / self.symmetry as f64) as f32;
+            (16384.0 * (self.decimation as f64) / ADC_SAMPLE_RATE / self.symmetry as f64) as f32;
         self.ramp_period_us = (self.ramp_period_s * 1.0e6) as u64;
         self
     }

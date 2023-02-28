@@ -77,6 +77,9 @@ pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(
         tomlget!(cfg, hostname, "ch_1_min_output_v", as_float, f32),
         tomlget!(cfg, hostname, "ch_1_max_output_v", as_float, f32),
     );
+    gen.ch_a
+        .set_trigger_source(librp_sys::generator::GenTriggerSource::ExternalRisingEdge);
+    gen.ch_a.enable();
     gen.ch_b.set_hw_offset_v(tomlget!(
         cfg,
         hostname,
@@ -90,6 +93,9 @@ pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(
         tomlget!(cfg, hostname, "ch_2_min_output_v", as_float, f32),
         tomlget!(cfg, hostname, "ch_2_max_output_v", as_float, f32),
     );
+    gen.ch_b
+        .set_trigger_source(librp_sys::generator::GenTriggerSource::ExternalRisingEdge);
+    gen.ch_b.enable();
     Ok(())
 }
 
@@ -155,6 +161,9 @@ pub fn scope_from_config(cfg: &toml::Value, scope: &mut Oscilloscope) -> Result<
         .set_decimation(tomlget!(cfg, "ramp", "decimation_factor", as_integer, u32))
         .expect("RP API call failure");
     scope.set_trigger_delay(8192).expect("RP API call failure");
+    scope
+        .set_trigger_source(librp_sys::oscilloscope::TrigSrc::ExtRising)
+        .expect("RP API call failure");
     scope.start_acquisition().expect("RP API call failure");
     Ok(())
 }
