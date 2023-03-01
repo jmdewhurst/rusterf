@@ -12,7 +12,7 @@ command_port = 8081
 
 [ramp]
 piezo_scale_factor = 3474.9457343334234
-piezo_settle_time_ms = 1.0e3
+piezo_settle_time_ms = 50.0
 amplitude_volts = 1.0
 decimation_factor = 16
 symmetry_factor = 0.8
@@ -44,6 +44,9 @@ gain_d = 0.0
 integral_decay_rate = 0.85
 feedback_max_step_size_v = 0.01
 
+plot_color = "#00ff80"
+seed_control = {timeout_sec = 10.0, loop_cycle_sec = 1.0, threshold_volts = 0.5, adjustment_size_volts = 0.1}
+
 [jmdsp7-arch]
 is_master = true
 slave_laser = "las_1114"
@@ -62,4 +65,6 @@ ch_2_min_output_v = 0.0
 ch_2_max_output_v = 5.0
 ch_2_preamp_gain = 2.5
 
+[server]
+listen_port = 8080
 

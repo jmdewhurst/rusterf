@@ -45,6 +45,7 @@ pub type rp_waveform_t = ::std::os::raw::c_uint;
 pub type rp_gen_mode_t = ::std::os::raw::c_uint;
 pub type rp_trig_src_t = ::std::os::raw::c_uint;
 
+fn_ok!(rp_GenReset);
 fn_ok!(rp_GenOutEnable, (core_ch: rp_channel_t));
 fn_ok!(rp_GenOutDisable, (core_ch: rp_channel_t));
 fn_ok!(rp_GenAmp, (core_ch: rp_channel_t), (amplitude: f32));

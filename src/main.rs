@@ -266,21 +266,7 @@ async fn main() {
         }
 
         fit_started = Instant::now();
-        // let (ref_result, slave_result) = thread::scope(|s| {
-        //     let ref_handle = s.spawn(|| {
-        //         interf.fit_setup_ref.fit(
-        //             data_ch!(interf.ref_laser, pit).as_slice(),
-        //             interf.ref_laser.fit_coefficients,
-        //         )
-        //     });
-        //     let slave_handle = s.spawn(|| {
-        //         interf.fit_setup_slave.fit(
-        //             data_ch!(interf.slave_laser, pit).as_slice(),
-        //             interf.slave_laser.fit_coefficients,
-        //         )
-        //     });
-        //     (ref_handle.join().unwrap(), slave_handle.join().unwrap())
-        // });
+        // Can also accomplish this with a 'scoped thread'
         let (ref_result, slave_result) = rayon_pool.join(
             || {
                 interf.fit_setup_ref.fit(
@@ -295,23 +281,12 @@ async fn main() {
                 )
             },
         );
-        // let ref_result = interf.fit_setup_ref.fit(
-        //     data_ch!(interf.ref_laser, pit).as_slice(),
-        //     interf.ref_laser.fit_coefficients,
-        // );
-
-        // let slave_result = interf.fit_setup_slave.fit(
-        //     data_ch!(interf.slave_laser, pit).as_slice(),
-        //     interf.slave_laser.fit_coefficients,
-        // );
         total_fitting_time_us += fit_started.elapsed().as_micros() as u32;
         iterations_ref += ref_result.n_iterations;
         iterations_slave += slave_result.n_iterations;
-        // println!(
-        //     "[{}] fitting time {} us",
-        //     Local::now(),
-        //     total_fitting_time_us
-        // );
+
+        interf.ref_laser.fit_coefficients = ref_result.params;
+        interf.slave_laser.fit_coefficients = slave_result.params;
 
         let ref_error =
             multifit::wrapped_angle_difference(ref_result.params[2], interf.ref_lock.setpoint());
