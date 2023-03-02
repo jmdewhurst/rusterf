@@ -320,11 +320,6 @@ async fn main() {
             .feedback_log
             .push(slave_out_ch.offset_v());
 
-        let _ = pit.scope.start_acquisition();
-        let _ = pit
-            .scope
-            .set_trigger_source(oscilloscope::TrigSrc::ExtRising);
-
         let last_ref_result = Some(ref_result);
         let last_slave_result = Some(slave_result);
 
@@ -347,6 +342,11 @@ async fn main() {
                 ),
             };
         }
+
+        let _ = pit.scope.start_acquisition();
+        let _ = pit
+            .scope
+            .set_trigger_source(oscilloscope::TrigSrc::ExtRising);
 
         loop {
             if triggered.elapsed().as_micros() as u64

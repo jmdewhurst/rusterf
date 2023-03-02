@@ -139,13 +139,7 @@ impl Interferometer {
             Some("RAMP") => self.process_ramp_command(cmd),
             Some("LASER") => self.process_laser_command(cmd),
             Some("LOCK") => match cmd.next() {
-                Some("REF") => {
-                    if self.is_master() {
-                        self.ref_lock.process_command(cmd)
-                    } else {
-                        Err(())
-                    }
-                }
+                Some("REF") => self.ref_lock.process_command(cmd),
                 Some("SLAVE") => self.slave_lock.process_command(cmd),
                 Some(_) | None => Err(()),
             },

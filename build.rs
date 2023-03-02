@@ -20,7 +20,7 @@ fn main() {
     // };
     // let target_gcc = format!("{}gcc", prefix);
 
-    cargo_messages(&out_dir);
+    cargo_messages(&out_dir, &target);
 
     if !Path::new(&format!("{out_dir}/config.toml")).exists() {
         Command::new(format!("sh -c cp examples/config.toml {out_dir}/")).exec();
@@ -43,13 +43,13 @@ fn main() {
     }
 }
 
-fn cargo_messages(out_dir: &str) {
+fn cargo_messages(out_dir: &str, target: &str) {
     println!("cargo:rerun-if-changed=src/multifit/sinusoid_fitting.c");
     println!("cargo:rerun-if-changed=src/multifit/sinusoid_fitting.h");
     println!("cargo:rerun-if-changed=build.rs");
 
     println!("cargo:rustc-link-lib=m");
-    if cfg!(target = "arm") {
+    if target == "armv7-unknown-linux-gnueabihf" {
         println!("cargo:rustc-link-lib=static=gsl");
         println!("cargo:rustc-link-lib=static=gslcblas");
     } else {
