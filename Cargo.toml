@@ -12,10 +12,8 @@ gethostname = "0.4"
 chrono = "0.4.23"
 rand = "0.8.5"
 rayon = "1.6.1"
-async-std = "1.12.0"
-zeromq = {git = "https://github.com/zeromq/zmq.rs", default-features=false, features=["async-std-runtime", "tcp-transport"]}
-futures = "0.3.26"
 bytes = "1.4.0"
+zmq = "0.10.0"
 
 [target.'cfg(target_arch = "arm")'.dependencies]
 librp-sys = {path = "librp-sys"}

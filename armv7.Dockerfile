@@ -7,7 +7,8 @@ FROM ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main
 
 # RUN dpkg --add-architecture $CROSS_DEB_ARCH
 RUN dpkg --add-architecture armhf
-RUN apt-get update && apt-get install -y --no-install-recommends apt-utils libgsl-dev:armhf
+RUN apt-get update && apt-get install -y --no-install-recommends apt-utils libgsl-dev:armhf libzmq3-dev:armhf
+# RUN apt-get update && apt-get install -y --no-install-recommends apt-utils libgsl-dev:armhf libzmq3-dev:armhf libcurl4-openssl-dev:armhf libpgm-dev:armhf libnorm-dev:armhf libprotobuf-dev:armhf
 
 
 # RUN apt-get update && apt-get -y install libgsl-dev:$CROSS_DEB_ARCH 

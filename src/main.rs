@@ -39,8 +39,7 @@ macro_rules! data_ch {
 
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::cast_possible_truncation)]
-#[async_std::main]
-async fn main() {
+fn main() {
     let mut pit = Pitaya::init().expect("Failed to intialize the Red Pitaya!");
     pit.gen
         .reset()
@@ -59,7 +58,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
-    let mut interf_comms = match configs::comms_from_config(&cfg).await {
+    let mut interf_comms = match configs::comms_from_config(&cfg) {
         Ok(x) => x,
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
@@ -201,14 +200,14 @@ async fn main() {
         }
 
         if interf_comms.should_publish_logs(interf.cycle_counter) {
-            match interf_comms.publish_logs(&mut interf).await {
+            match interf_comms.publish_logs(&mut interf) {
                 Ok(()) => {}
                 Err(x) => {
                     eprintln!("[{}] Failed to publish logs: error [{}]", Local::now(), x);
                 }
             }
         }
-        while let Some(request) = interf_comms.handle_socket_request(&mut interf).await {
+        while let Some(request) = interf_comms.handle_socket_request(&mut interf) {
             println!("[{}] Handled socket request <{}>", Local::now(), request);
         }
 
