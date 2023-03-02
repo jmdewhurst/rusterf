@@ -1,2 +1,8 @@
 /target
-Cargo.toml
+*/target/
+RedPitaya/
+gsl-*.*.tar.gz
+gsl-*.*/ 
+gsl_native/
+
+Cargo.lock

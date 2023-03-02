@@ -1,0 +1,18 @@
+[package]
+name = "librp-sys"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+enum_primitive = "0.1.1"
+lazy_static = {version = "1.4.0", optional = true}
+
+[build-dependencies]
+bindgen = "0.63"
+
+[features]
+# if enabled, replaces Red Pitaya API calls with dummies for testing on non-RP systems
+no_api = ["dep:lazy_static"]
+no_api_loud = ["dep:lazy_static"]
