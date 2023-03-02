@@ -133,7 +133,7 @@ impl Interferometer {
     /// Handle an incoming command by routing it to the appropriate sufunction. Returns a String
     /// holding the response to the sender of the command.
     /// # Errors
-    /// Returns `Err(())` in case of a failure to parse a valid top-level command in `cmd`
+    /// Returns `Err(())` in case of a failure to parse a valid command in `cmd`
     pub fn process_command(&mut self, mut cmd: Split<'_, char>) -> Result<String, ()> {
         match cmd.next() {
             Some("RAMP") => self.process_ramp_command(cmd),

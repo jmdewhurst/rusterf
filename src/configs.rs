@@ -48,12 +48,9 @@ macro_rules! tomlget {
             .ok_or_else(|| format!("failed to convert {}:{} to boolean", $sec, $key))?
     };
 }
-pub fn floor_exp(num: u32) -> u8 {
-    let mut exp = 0;
-    while 1 << exp < num {
-        exp += 1;
-    }
-    if 1 << exp > num {
+pub fn floor_exp(num: u64) -> u8 {
+    let mut exp = 63;
+    while (1 << exp) & num == 0 {
         exp -= 1;
     }
     exp
@@ -150,12 +147,6 @@ pub fn scope_from_config(cfg: &toml::Value, scope: &mut Oscilloscope) -> Result<
         tomlget!(cfg, "multifit", "samples_skip_end", as_integer, usize),
         tomlget!(cfg, "multifit", "skip_rate", as_integer, usize),
     );
-    // let mfit = &cfg.get("multifit")?;
-    // scope.set_roi(
-    //     mfit.get("samples_skip_start")?.as_integer()? as usize,
-    //     mfit.get("samples_skip_end")?.as_integer()? as usize,
-    //     mfit.get("skip_rate")?.as_integer()? as usize,
-    // );
     // NOTE: ramp::apply() also sets the decimation, waveform; we may be needlessly duplicating logic here
     scope
         .set_decimation(tomlget!(cfg, "ramp", "decimation_factor", as_integer, u32))
@@ -410,5 +401,8 @@ mod tests {
         assert_eq!(floor_exp(3), 1);
         assert_eq!(floor_exp(4), 2);
         assert_eq!(floor_exp(2048), 11);
+        assert_eq!(floor_exp(2049), 11);
+        assert_eq!(floor_exp(4095), 11);
+        assert_eq!(floor_exp(4096), 12);
     }
 }

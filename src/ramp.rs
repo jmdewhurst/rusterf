@@ -10,7 +10,6 @@ use std::f32::consts::PI;
 use librp_sys::core::{APIResult, ADC_SAMPLE_RATE};
 use librp_sys::generator::{DCChannel, PulseChannel};
 use librp_sys::oscilloscope::Oscilloscope;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct DaqSetup {
@@ -144,44 +143,5 @@ impl DaqSetup {
 impl Default for DaqSetup {
     fn default() -> Self {
         DaqSetup::new()
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct DaqSerialize {
-    amplitude_volts: f32,
-    piezo_scale_factor: f32, // units of nm / Volt
-    piezo_settle_time_ms: f32,
-}
-
-impl DaqSerialize {
-    fn into_ramp(self) -> DaqSetup {
-        let mut out = DaqSetup::new();
-        out.amplitude(self.amplitude_volts);
-        out.piezo_settle_time_ms(self.piezo_settle_time_ms);
-        out
-    }
-
-    fn from_ramp(ramp: &DaqSetup) -> Self {
-        DaqSerialize {
-            amplitude_volts: ramp.amplitude_volts,
-            piezo_scale_factor: ramp.piezo_scale_factor,
-            piezo_settle_time_ms: ramp.piezo_settle_time_ms,
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for DaqSetup {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(DaqSerialize::deserialize(d)?.into_ramp())
-    }
-}
-
-impl Serialize for DaqSetup {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        DaqSerialize::from_ramp(self).serialize(serializer)
     }
 }

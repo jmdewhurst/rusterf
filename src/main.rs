@@ -72,7 +72,7 @@ async fn main() {
         .get("debug_list_freq_cycles")
     {
         DO_DEBUG_LOGGING = true;
-        DEBUG_LOG_FREQ_LOG = configs::floor_exp(*freq as u32);
+        DEBUG_LOG_FREQ_LOG = configs::floor_exp(*freq as u64);
     } else {
         DO_DEBUG_LOGGING = false;
         DEBUG_LOG_FREQ_LOG = 0;

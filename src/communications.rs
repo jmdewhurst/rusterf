@@ -1,11 +1,10 @@
 #![warn(clippy::pedantic)]
 // use std::io::Read;
 
+use bytes::Bytes;
 use chrono::Local;
 use futures::future::FutureExt;
 use gethostname::gethostname;
-// use serde::{Deserialize, Serialize};
-use bytes::Bytes;
 use zeromq::prelude::*;
 
 use super::configs::floor_exp;
@@ -66,7 +65,7 @@ impl InterfComms {
 
     pub fn set_log_publish_frequency(&mut self, num_cycles: u32) {
         // round `num_cycles` down to the nearest power of 2
-        self.logs_publish_frequency_exponent = floor_exp(num_cycles);
+        self.logs_publish_frequency_exponent = floor_exp(num_cycles as u64);
     }
 
     #[inline]
@@ -212,45 +211,3 @@ impl InterfComms {
         Ok(())
     }
 }
-
-// #[derive(Serialize, Deserialize, Debug)]
-// struct CommsSerialize {
-//     hostname: String,
-//     logs_port: u16,
-//     command_port: u16,
-// }
-
-// impl CommsSerialize {
-//     fn into_interf_comms(self) -> Option<InterfComms> {
-//         if gethostname().into_string().ok()? == self.hostname {
-//             let ctx = zmq::Context::new();
-//             let mut comms = InterfComms::new(&ctx)?;
-//             comms.bind_sockets(self.logs_port, self.command_port).ok()?;
-//             return Some(comms);
-//         }
-//         None
-//     }
-
-//     fn from_interf_comms(comms: &InterfComms) -> Self {
-//         CommsSerialize {
-//             hostname: comms.hostname.to_string(),
-//             logs_port: comms.logs_port,
-//             command_port: comms.command_port,
-//         }
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for InterfComms {
-//     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-//         Ok(CommsSerialize::deserialize(d)?.into_interf_comms().unwrap())
-//     }
-// }
-
-// impl Serialize for InterfComms {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         CommsSerialize::from_interf_comms(self).serialize(serializer)
-//     }
-// }
