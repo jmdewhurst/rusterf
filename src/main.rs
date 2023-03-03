@@ -164,12 +164,11 @@ async fn main() {
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
+    if interf.is_master() {
+        interf.ref_lock.enable();
+    }
     loop {
         interf.cycle_counter += 1;
-
-        if interf.is_master() {
-            interf.ref_lock.enable();
-        }
 
         if interf.is_master() {
             loop {
