@@ -275,13 +275,14 @@ impl Generator {
 
 impl<'a> DCChannel<'a> {
     pub fn init(ch: &'a mut Channel) -> APIResult<Self> {
-        ch.set_waveform_type(WaveformType::Sine)?;
+        ch.set_waveform_type(WaveformType::RampUp)?;
         let _ = ch.set_amplitude_v(0.0);
         ch.set_mode(GenMode::Burst)?;
         ch.set_burst_count(1)?;
         ch.set_burst_repetitions(1)?;
         ch.set_offset_v((ch.max_output_v - ch.min_output_v) / 2.0);
         ch.set_burst_last_value(ch.offset_v)?;
+        ch.enable()?;
         Ok(DCChannel { ch })
     }
     #[inline]
