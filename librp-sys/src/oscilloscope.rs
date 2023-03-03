@@ -190,13 +190,13 @@ impl Oscilloscope {
             ret_a.push(unsafe {
                 read_volatile(
                     self.chA_buff_raw
-                        .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
+                        .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
                 )
             });
             ret_b.push(unsafe {
                 read_volatile(
                     self.chB_buff_raw
-                        .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
+                        .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
                 )
             });
         }
@@ -220,7 +220,7 @@ impl Oscilloscope {
         self.chA_buff_float.extend(region_iter.map(|i| unsafe {
             read_volatile(
                 self.chA_buff_raw
-                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
             ) as f32
         }));
 
@@ -229,7 +229,7 @@ impl Oscilloscope {
         self.chB_buff_float.extend(region_iter.map(|i| unsafe {
             read_volatile(
                 self.chB_buff_raw
-                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
             ) as f32
         }));
 
@@ -251,13 +251,13 @@ impl Oscilloscope {
         chA.extend((0..BUFF_SIZE).map(|i| unsafe {
             read_volatile(
                 self.chA_buff_raw
-                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
             )
         }));
         chB.extend((0..BUFF_SIZE).map(|i| unsafe {
             read_volatile(
                 self.chB_buff_raw
-                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
             )
         }));
 
@@ -281,7 +281,7 @@ impl Oscilloscope {
                         Channel::CH_1 => self.chA_buff_raw,
                         Channel::CH_2 => self.chB_buff_raw,
                     }
-                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
                 )
             });
         }
