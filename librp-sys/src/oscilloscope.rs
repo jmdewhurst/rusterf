@@ -18,8 +18,9 @@ pub const BASE_SAMPLE_RATE: f32 = 125_000_000.0;
 // The oscilloscope buffer is 16384 points
 pub const BUFF_SIZE: usize = 16384;
 // bitmask to get the lower 14 bits; bitwise AND with this mask
-// is equivalent to division by 16384 but is much more performant
-// Unclear if this is useful; the compiler may optimize this already
+// is equivalent to division by 16384 but is much more performant.
+// This relies on the fact that Red Pitaya's internal oscilloscope buffers are aligned to 16484
+// bytes; this will not work for a general ring buffer.
 pub const BUFF_MASK: usize = 16384 - 1;
 
 enum_from_primitive! {
@@ -189,13 +190,13 @@ impl Oscilloscope {
             ret_a.push(unsafe {
                 read_volatile(
                     self.chA_buff_raw
-                        .offset((index.wrapping_add(i as isize)) as isize & BUFF_MASK as isize),
+                        .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
                 )
             });
             ret_b.push(unsafe {
                 read_volatile(
                     self.chB_buff_raw
-                        .offset((index.wrapping_add(i as isize)) as isize & BUFF_MASK as isize),
+                        .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
                 )
             });
         }
@@ -219,7 +220,7 @@ impl Oscilloscope {
         self.chA_buff_float.extend(region_iter.map(|i| unsafe {
             read_volatile(
                 self.chA_buff_raw
-                    .offset((index.wrapping_add(i as isize)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
             ) as f32
         }));
 
@@ -228,7 +229,7 @@ impl Oscilloscope {
         self.chB_buff_float.extend(region_iter.map(|i| unsafe {
             read_volatile(
                 self.chB_buff_raw
-                    .offset((index.wrapping_add(i as isize)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
             ) as f32
         }));
 
@@ -250,13 +251,13 @@ impl Oscilloscope {
         chA.extend((0..BUFF_SIZE).map(|i| unsafe {
             read_volatile(
                 self.chA_buff_raw
-                    .offset((index.wrapping_add(i as isize)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
             )
         }));
         chB.extend((0..BUFF_SIZE).map(|i| unsafe {
             read_volatile(
                 self.chB_buff_raw
-                    .offset((index.wrapping_add(i as isize)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
             )
         }));
 
@@ -280,7 +281,7 @@ impl Oscilloscope {
                         Channel::CH_1 => self.chA_buff_raw,
                         Channel::CH_2 => self.chB_buff_raw,
                     }
-                    .offset((index.wrapping_add(i as isize)) as isize & BUFF_MASK as isize),
+                    .offset((index.wrapping_add(i as isize - 1)) as isize & BUFF_MASK as isize),
                 )
             });
         }
