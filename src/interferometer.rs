@@ -31,9 +31,9 @@ impl Interferometer {
     pub fn new() -> Option<Self> {
         Some(Interferometer {
             ref_laser: Laser::new(12)?,
-            ref_lock: Servo::new(),
+            ref_lock: Servo::default(),
             slave_laser: Laser::new(12)?,
-            slave_lock: Servo::new(),
+            slave_lock: Servo::default(),
             fit_setup_ref: multifit::FitSetup::init(1, 16384, 16, 1e-6, 1e-6, 1e-6, 3.0)?,
             fit_setup_slave: multifit::FitSetup::init(1, 16384, 16, 1e-6, 1e-6, 1e-6, 3.0)?,
 

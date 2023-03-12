@@ -17,12 +17,15 @@ pub struct DyadicRingBuffer<T: Copy + Default> {
     data: Vec<T>,
 }
 
+// TODO: investigate direct memory reads into slice underlying the vector, rather than
+// builtin bounds-checked indexing.
 impl<T: Copy + Default> DyadicRingBuffer<T> {
     #[must_use]
     pub fn new(n: usize) -> Option<Self> {
         // semi-arbitrary maximum size -- at the moment, we limit log length to about 1M entries.
         // One could expand this, but you may run into issues trying to allocate a very large
-        // array. You probably shouldn't be storing that many values in a basic array, though?
+        // array.
+        // If you want to store that much data, you should probably consider another data structure.
         if n > 20 {
             return None;
         };
@@ -39,21 +42,31 @@ impl<T: Copy + Default> DyadicRingBuffer<T> {
     }
 
     #[must_use]
+    #[inline]
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.len
     }
 
     #[must_use]
+    #[inline]
     pub fn exponent(&self) -> usize {
         self.n
     }
 
     #[must_use]
+    #[inline]
     pub fn index(&self) -> usize {
         self.posn & (self.len - 1)
     }
 
+    #[must_use]
+    #[inline]
+    pub fn last(&self) -> T {
+        self.data[self.index()]
+    }
+
+    #[inline]
     pub fn push(&mut self, val: T) {
         self.posn = self.posn.wrapping_add(1);
         self.data[self.posn & (self.len - 1)] = val;
