@@ -58,6 +58,7 @@ pub struct Servo {
     error_feedback: f32,
     mode: Mode,
 
+    pub default_output_voltage: Option<f32>,
     pub max_feedback_step_size: f32,
     pub err_max_tolerance: f32,
 }
@@ -78,6 +79,7 @@ impl Default for Servo {
             mode: Mode::Disabled(DisableState::Unresolved),
             max_feedback_step_size: f32::INFINITY,
             err_max_tolerance: f32::INFINITY,
+            default_output_voltage: None,
         }
     }
 }

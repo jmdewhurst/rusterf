@@ -18,7 +18,7 @@ use std::{env, thread, time};
 use chrono::Local;
 
 use librp_sys::dpin;
-use librp_sys::generator::{DCChannel, PulseChannel};
+// use librp_sys::generator::{DCChannel, PulseChannel};
 use librp_sys::Pitaya;
 use librp_sys::{core, oscilloscope};
 
@@ -31,8 +31,8 @@ use rusterf::multifit;
 macro_rules! data_ch {
     ($laser:expr, $pit:ident) => {
         match $laser.input_channel {
-            core::Channel::CH_1 => &$pit.scope.chA_buff_float,
-            core::Channel::CH_2 => &$pit.scope.chB_buff_float,
+            core::RPCoreChannel::CH_1 => &$pit.scope.chA_buff_float,
+            core::RPCoreChannel::CH_2 => &$pit.scope.chB_buff_float,
         }
     };
 }
@@ -96,44 +96,39 @@ async fn main() {
             .expect("API call should succeed");
     }
 
-    let mut ramp_ch;
-    let mut slave_out_ch;
-    match interf.ref_laser.output_channel {
-        Some(core::Channel::CH_1) => {
-            ramp_ch = Some(
-                PulseChannel::init(&mut pit.gen.ch_a, vec![0.0; 16], 1.0)
-                    .expect("failed to initialize pulse_channel!"),
-            );
-            slave_out_ch =
-                DCChannel::init(&mut pit.gen.ch_b).expect("failed to initialize dc_channel!");
+    let ramp_ch_raw;
+    let slave_out_ch_raw;
+    match (
+        interf.ref_laser.output_channel,
+        interf.slave_laser.output_channel,
+    ) {
+        (Some(core::RPCoreChannel::CH_1), Some(core::RPCoreChannel::CH_2)) => {
+            ramp_ch_raw = Some(&mut pit.gen.ch_a);
+            slave_out_ch_raw = &mut pit.gen.ch_b;
         }
-
-        Some(core::Channel::CH_2) => {
-            ramp_ch = Some(
-                PulseChannel::init(&mut pit.gen.ch_b, vec![0.0; 16], 1.0)
-                    .expect("failed to initialize pulse_channel!"),
-            );
-            slave_out_ch =
-                DCChannel::init(&mut pit.gen.ch_a).expect("failed to initialize dc_channel!");
+        (Some(core::RPCoreChannel::CH_2), Some(core::RPCoreChannel::CH_1)) => {
+            ramp_ch_raw = Some(&mut pit.gen.ch_b);
+            slave_out_ch_raw = &mut pit.gen.ch_a;
         }
-        None => {
-            ramp_ch = None;
-            slave_out_ch =
-                match interf
-                    .slave_laser
-                    .output_channel
-                    .expect("interferometer_from_config already set up slave output channel")
-                {
-                    core::Channel::CH_1 => DCChannel::init(&mut pit.gen.ch_a)
-                        .expect("failed to initialize dc_channel!"),
-                    core::Channel::CH_2 => DCChannel::init(&mut pit.gen.ch_b)
-                        .expect("failed to initialize dc_channel!"),
-                };
+        (None, Some(core::RPCoreChannel::CH_1)) => {
+            ramp_ch_raw = None;
+            slave_out_ch_raw = &mut pit.gen.ch_a;
+        }
+        (None, Some(core::RPCoreChannel::CH_2)) => {
+            ramp_ch_raw = None;
+            slave_out_ch_raw = &mut pit.gen.ch_b;
+        }
+        (_, None) => {
+            panic!("Fatal: No slave laser output channel found. Check configuration file.");
+        }
+        (x, y) => {
+            panic!("Fatal: Failed to set reference laser output to channel {x:?} and slave laser output to channel {y:?}. Does the configuration file list both lasers on the same output channel?");
         }
     };
-    interf
+    let (mut ramp_ch, mut slave_out_ch) = interf
         .ramp_setup
-        .apply(&mut pit.scope, ramp_ch.as_mut(), &mut slave_out_ch)
+        .slave_default_offset_v(interf.slave_lock.default_output_voltage)
+        .apply(&mut pit.scope, ramp_ch_raw, slave_out_ch_raw)
         .expect("failed to apply ramp settings");
 
     pit.scope
@@ -304,20 +299,17 @@ async fn main() {
         let slave_adjustment = interf.slave_lock.do_pid(slave_error);
 
         if ramp_ch.is_some() {
-            let _ = ramp_ch.as_mut().unwrap().increment_offset(ref_adjustment);
+            let _ = ramp_ch.as_mut().unwrap().adjust_offset(ref_adjustment);
         }
-        slave_out_ch.increment_offset(slave_adjustment);
+        slave_out_ch.adjust_offset(slave_adjustment);
 
         interf.ref_laser.phase_log.push(ref_error);
         interf
             .ref_laser
             .feedback_log
-            .push(ramp_ch.as_ref().map_or(0.0, PulseChannel::offset_v));
+            .push(ramp_ch.as_ref().map_or(0.0, |x| x.offset()));
         interf.slave_laser.phase_log.push(slave_error);
-        interf
-            .slave_laser
-            .feedback_log
-            .push(slave_out_ch.offset_v());
+        interf.slave_laser.feedback_log.push(slave_out_ch.offset());
 
         let last_ref_result = Some(ref_result);
         let last_slave_result = Some(slave_result);
@@ -331,11 +323,11 @@ async fn main() {
             // communications event, so in effect when we publish a 'most recent waveform', it's
             // actually a few cycles out of date.
             let _ = match interf.ref_laser.input_channel {
-                core::Channel::CH_1 => pit.scope.write_raw_waveform(
+                core::RPCoreChannel::CH_1 => pit.scope.write_raw_waveform(
                     &mut interf.last_waveform_ref,
                     &mut interf.last_waveform_slave,
                 ),
-                core::Channel::CH_2 => pit.scope.write_raw_waveform(
+                core::RPCoreChannel::CH_2 => pit.scope.write_raw_waveform(
                     &mut interf.last_waveform_slave,
                     &mut interf.last_waveform_ref,
                 ),

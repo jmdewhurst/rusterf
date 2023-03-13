@@ -10,8 +10,8 @@ use librp_sys::core;
 #[derive(Debug)]
 pub struct Laser {
     wavelength_nm: f32,
-    pub input_channel: core::Channel,
-    pub output_channel: Option<core::Channel>,
+    pub input_channel: core::RPCoreChannel,
+    pub output_channel: Option<core::RPCoreChannel>,
     pub fit_coefficients: [f32; 4],
     fringe_freq: f32,
     pub phase_log: DyadicRingBuffer<f32>,
@@ -23,7 +23,7 @@ impl Laser {
     pub fn new(n: usize) -> Option<Self> {
         Some(Laser {
             wavelength_nm: 1000.,
-            input_channel: core::Channel::CH_1,
+            input_channel: core::RPCoreChannel::CH_1,
             output_channel: None,
             fringe_freq: 1.0,
             fit_coefficients: [0.0, 0.0, 0.0, 0.0],

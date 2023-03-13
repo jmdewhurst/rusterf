@@ -3,7 +3,7 @@
 
 use std::str::Split;
 
-use librp_sys::core::{APIResult, Channel};
+use librp_sys::core::{APIResult, RPCoreChannel};
 use librp_sys::oscilloscope::Oscilloscope;
 
 use super::laser::Laser;
@@ -70,10 +70,10 @@ impl Interferometer {
     /// Propagates any Red Pitaya API errors
     pub fn update_last_waveforms(&mut self, osc: &mut Oscilloscope) -> APIResult<()> {
         match self.ref_laser.input_channel {
-            Channel::CH_1 => {
+            RPCoreChannel::CH_1 => {
                 osc.write_raw_waveform(&mut self.last_waveform_ref, &mut self.last_waveform_slave)?;
             }
-            Channel::CH_2 => {
+            RPCoreChannel::CH_2 => {
                 osc.write_raw_waveform(&mut self.last_waveform_slave, &mut self.last_waveform_ref)?;
             }
         };

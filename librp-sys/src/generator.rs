@@ -11,9 +11,8 @@ use crate::core;
 use crate::core::{APIError, APIError::RP_OK, APIResult};
 use enum_primitive::*;
 use std::ffi::c_int;
-use std::thread;
-use std::time::Duration;
-// use std::mem::MaybeUninit;
+use std::marker::PhantomData;
+use std::ptr::addr_of_mut;
 
 enum_from_primitive! {
 #[derive(Debug, Copy, Clone)]
@@ -38,7 +37,7 @@ enum_from_primitive! {
 pub enum GenMode {
         Continuous = 0,
         Burst,
-        Stream,
+        // Stream,
 }
 }
 
@@ -52,34 +51,14 @@ pub enum GenTriggerSource {
 }
 }
 
-/// Nomenclature possibly confusing with Rust's thread-safe ``Channel``. Keeping this way for
-/// consistency with the underlying Red Pitaya API.
-#[derive(Debug)]
-pub struct Channel {
-    core_ch: core::Channel,
-    ampl_v: f32,
-    offset_v: f32,
-    hardware_offset_v: f32,
-    gain_post: f32,
-    min_output_v: f32,
-    max_output_v: f32,
-}
-
-#[derive(Debug)]
-pub struct Generator {
-    pub ch_a: Channel,
-    pub ch_b: Channel,
-}
-
-#[derive(Debug)]
-pub struct PulseChannel<'a> {
-    pub ch: &'a mut Channel,
-    waveform_last_value: f32,
-}
-
-#[derive(Debug)]
-pub struct DCChannel<'a> {
-    pub ch: &'a mut Channel,
+#[macro_export]
+macro_rules! ch_switch {
+    ($ch:expr, $if_a:expr, $if_b:expr) => {
+        match $ch {
+            core::Channel::CH_1 => $if_a,
+            core::Channel::CH_2 => $if_b,
+        }
+    };
 }
 
 macro_rules! cch {
@@ -88,11 +67,77 @@ macro_rules! cch {
     };
 }
 
-/// # Errors
-/// If an RP API call returns a failure code, this returns Err containing the failure.
-/// # Panics
-/// Panics if the RP API returns a catastrophically wrong value
-impl Channel {
+#[derive(Debug)]
+pub struct RawChannel {
+    core_ch: core::RPCoreChannel,
+    hardware_offset_v: f32,
+    gain_post: f32,
+    min_output_v: f32,
+    max_output_v: f32,
+    _phantom: PhantomData<()>,
+}
+
+pub trait ChannelFlavor {}
+
+#[derive(Debug)]
+pub struct Base {}
+impl ChannelFlavor for Base {}
+
+#[derive(Debug)]
+pub struct Pulse {}
+impl ChannelFlavor for Pulse {}
+
+#[derive(Debug)]
+pub struct DC {}
+impl ChannelFlavor for DC {}
+
+/// Nomenclature possibly confusing with Rust's thread-safe ``Channel``. Keeping this way for
+/// consistency with the underlying Red Pitaya API.
+#[derive(Debug)]
+pub struct Channel<'a, Flavor: ChannelFlavor = Base> {
+    raw_channel: &'a mut RawChannel,
+
+    ampl_v: f32,
+    offset_v: f32,
+    waveform_last_value: f32,
+
+    _phantom: PhantomData<Flavor>,
+}
+
+#[derive(Debug)]
+pub struct Generator {
+    pub ch_a: RawChannel,
+    pub ch_b: RawChannel,
+}
+impl Generator {
+    #[must_use]
+    pub(crate) fn init() -> Self {
+        Generator {
+            ch_a: RawChannel {
+                core_ch: core::RPCoreChannel::CH_1,
+                hardware_offset_v: 0.0,
+                min_output_v: -1.0,
+                max_output_v: 1.0,
+                gain_post: 1.0,
+                _phantom: PhantomData::<()>,
+            },
+            ch_b: RawChannel {
+                core_ch: core::RPCoreChannel::CH_2,
+                hardware_offset_v: 0.0,
+                min_output_v: -1.0,
+                max_output_v: 1.0,
+                gain_post: 1.0,
+                _phantom: PhantomData::<()>,
+            },
+        }
+    }
+
+    pub fn reset(&self) -> APIResult<()> {
+        wrap_call!(rp_GenReset)
+    }
+}
+
+impl RawChannel {
     #[inline]
     pub fn enable(&mut self) -> APIResult<()> {
         wrap_call!(rp_GenOutEnable, cch!(self))
@@ -108,8 +153,38 @@ impl Channel {
     }
 
     #[inline]
+    pub fn set_amplitude_v(&mut self, amplitude_v: f32) -> APIResult<()> {
+        self.set_amplitude_raw(amplitude_v / self.gain_post)
+    }
+    #[inline]
+    pub fn get_amplitude_raw(&mut self) -> APIResult<f32> {
+        let mut out: f32 = 0.0;
+        wrap_call!(rp_GenGetAmp, cch!(self), addr_of_mut!(out))?;
+        Ok(out)
+    }
+    #[inline]
+    pub fn get_amplitude_v(&mut self) -> APIResult<f32> {
+        Ok(self.get_amplitude_raw()? * self.gain_post)
+    }
+
+    #[inline]
     pub fn set_offset_raw(&mut self, volts: f32) -> APIResult<()> {
         wrap_call!(rp_GenOffset, cch!(self), volts)
+    }
+
+    #[inline]
+    pub fn set_offset_v(&mut self, offset_v: f32) -> APIResult<()> {
+        self.set_offset_raw(offset_v / self.gain_post - self.hardware_offset_v)
+    }
+    #[inline]
+    pub fn get_offset_raw(&mut self) -> APIResult<f32> {
+        let mut out: f32 = 0.0;
+        wrap_call!(rp_GenGetOffset, cch!(self), addr_of_mut!(out))?;
+        Ok(out)
+    }
+    #[inline]
+    pub fn get_offset_v(&mut self) -> APIResult<f32> {
+        Ok((self.get_offset_raw()? + self.hardware_offset_v) * self.gain_post)
     }
 
     #[inline]
@@ -163,12 +238,12 @@ impl Channel {
     /// after the end of the final waveform. This function sets the voltage the AWG outputs
     /// after finishing the burst.
     #[inline]
-    pub fn set_burst_last_value(&mut self, val_volts: f32) -> APIResult<()> {
-        wrap_call!(
-            rp_GenBurstLastValue,
-            cch!(self),
-            val_volts / self.gain_post - self.hardware_offset_v
-        )
+    pub fn set_burst_last_value_raw(&mut self, val_volts: f32) -> APIResult<()> {
+        wrap_call!(rp_GenBurstLastValue, cch!(self), val_volts)
+    }
+    #[inline]
+    pub fn set_burst_last_value_v(&mut self, val_volts: f32) -> APIResult<()> {
+        self.set_burst_last_value_raw(val_volts / self.gain_post - self.hardware_offset_v)
     }
 
     /// Sets the source of the trigger for the AWG. Internal is triggered directly from
@@ -198,189 +273,295 @@ impl Channel {
         //TODO: guanrantee `min_v < max_v` and neither is NaN
         self.min_output_v = min_v;
         self.max_output_v = max_v;
-        let _ = self.set_amplitude_v(self.ampl_v);
     }
     #[inline]
     pub fn set_hw_offset_v(&mut self, hw_offset_v: f32) {
         self.hardware_offset_v = hw_offset_v;
-        let _ = self.set_amplitude_v(self.ampl_v);
     }
     #[inline]
     pub fn set_gain_post(&mut self, gain: f32) {
         self.gain_post = gain;
-        let _ = self.set_amplitude_v(self.ampl_v);
+    }
+}
+
+impl<'a, Flavor: ChannelFlavor> Channel<'a, Flavor> {
+    #[inline]
+    pub fn enable(&mut self) -> APIResult<()> {
+        self.raw_channel.enable()
+    }
+    #[inline]
+    pub fn disable(&mut self) -> APIResult<()> {
+        self.raw_channel.enable()
     }
 
-    /// # Errors:
-    /// If setting the amplitude would cause the function generator to exceed the user-configured
-    /// voltage range, it will set that amplitude, clamp the offset, and return `Err` containing
-    /// the new offset.
     #[inline]
-    #[allow(clippy::float_cmp)]
-    pub fn set_amplitude_v(&mut self, ampl_v: f32) -> Result<(), f32> {
-        self.ampl_v = ampl_v.clamp(0.0, 1.0 * self.gain_post);
-        let _ = self.set_amplitude_raw(ampl_v / self.gain_post);
-        let old_val = self.offset_v;
-        let new_val = self.set_offset_v(old_val);
-        if new_val != old_val {
-            return Err(new_val);
-        }
-        Ok(())
-    }
-    /// sets the offset, clamped to within the user-configured output range (including amplitude).
-    /// Returns the set offset voltage.
-    #[inline]
-    pub fn set_offset_v(&mut self, offset_v: f32) -> f32 {
-        // Calling this function with `offset_v == 0.0` should set the 'zero point' of the waveform
-        // to halfway between the minimum and maximum allowed values
-        self.offset_v = offset_v.clamp(
-            self.min_output_v + self.ampl_v,
-            self.max_output_v - self.ampl_v,
-        );
-        self.set_offset_raw(self.offset_v / self.gain_post - self.hardware_offset_v)
-            .expect("RP API calls shouldn't fail");
+    #[must_use]
+    pub fn offset(&self) -> f32 {
         self.offset_v
     }
+    #[inline]
+    #[must_use]
+    pub fn amplitude(&self) -> f32 {
+        self.ampl_v
+    }
+    #[inline]
+    pub fn set_offset(&mut self, offset_v: f32) -> APIResult<()> {
+        self.offset_v = offset_v.clamp(
+            self.raw_channel.min_output_v + self.ampl_v.abs(),
+            self.raw_channel.max_output_v - self.ampl_v.abs(),
+        );
+        self.raw_channel.set_offset_v(self.offset_v)?;
+        self.raw_channel
+            .set_burst_last_value_v(self.offset_v + self.ampl_v * self.waveform_last_value)
+    }
+
+    #[inline]
+    pub fn adjust_offset(&mut self, adjustment_v: f32) -> APIResult<()> {
+        self.set_offset(adjustment_v + self.offset_v)
+    }
 }
 
-impl Generator {
+#[derive(Debug)]
+pub enum ChannelInitializationError {
+    NaNValue,          // one of the given parameters is NaN
+    InfiniteValue,     // The gain or hardware offset specified is infinite
+    ZeroGain,          // the specified gain parameter is zero
+    RangeInversion,    // max voltage less than min voltage
+    RangeInaccessible, // the specified range is not accessible given the gain and hardware offset
+    NoWaveform,        // Attempted to initialize a PulseChannel without providing a pulse waveform
+
+    PitayaAPIError(APIError), // Error in writing API commands
+}
+impl From<APIError> for ChannelInitializationError {
+    fn from(e: APIError) -> Self {
+        Self::PitayaAPIError(e)
+    }
+}
+
+//TODO: consider swapping `Option<Vec>` for `Option<&mut [f32]>`
+#[derive(Debug)]
+pub struct ChannelBuilder<'a, Flavor: ChannelFlavor = Base> {
+    ch: &'a mut RawChannel,
+    hardware_offset_v: f32,
+    gain_post: f32,
+    range_v: std::ops::Range<f32>,
+
+    freq_hz: f32,
+    offset_v: f32,
+    amplitude_v: f32,
+    waveform: Option<Vec<f32>>,
+
+    enable: bool,
+
+    phantom: PhantomData<Flavor>,
+}
+impl<'a, Flavor: ChannelFlavor> ChannelBuilder<'a, Flavor> {
     #[must_use]
-    pub(crate) fn init() -> Self {
-        Generator {
-            ch_a: Channel {
-                core_ch: core::Channel::CH_1,
-                ampl_v: 1.0,
-                offset_v: 0.0,
-                hardware_offset_v: 0.0,
-                min_output_v: -1.0,
-                max_output_v: 1.0,
-                gain_post: 1.0,
-            },
-            ch_b: Channel {
-                ampl_v: 1.0,
-                offset_v: 0.0,
-                core_ch: core::Channel::CH_2,
-                hardware_offset_v: 0.0,
-                min_output_v: -1.0,
-                max_output_v: 1.0,
-                gain_post: 1.0,
-            },
+    pub fn new(channel: &'a mut RawChannel) -> Self {
+        ChannelBuilder {
+            ch: channel,
+            hardware_offset_v: 0.0,
+            gain_post: 1.0,
+            range_v: -1.0..1.0,
+            freq_hz: 1000.0,
+            offset_v: 0.0,
+            amplitude_v: 1.0,
+            waveform: None,
+            enable: true,
+            phantom: PhantomData::<Flavor>,
         }
     }
-
-    pub fn reset(&self) -> APIResult<()> {
-        wrap_call!(rp_GenReset)
-    }
-}
-
-impl<'a> DCChannel<'a> {
-    pub fn init(ch: &'a mut Channel) -> APIResult<Self> {
-        ch.set_waveform_type(WaveformType::RampUp)?;
-        let _ = ch.set_amplitude_v(0.0);
-        ch.set_mode(GenMode::Burst)?;
-        ch.set_burst_count(1)?;
-        ch.set_burst_repetitions(1)?;
-        ch.set_offset_v((ch.max_output_v - ch.min_output_v) / 2.0);
-        ch.set_burst_last_value(ch.offset_v)?;
-        ch.enable()?;
-        Ok(DCChannel { ch })
-    }
-    #[inline]
-    pub fn enable(&mut self) -> APIResult<()> {
-        self.ch.enable()
-    }
-    #[inline]
-    pub fn disable(&mut self) -> APIResult<()> {
-        self.ch.disable()
-    }
-    #[inline]
-    pub fn set_offset(&mut self, offset_v: f32) {
-        self.ch.set_offset_v(offset_v);
-        let _ = self.ch.set_burst_last_value(offset_v);
-    }
-    #[inline]
     #[must_use]
-    pub fn offset_v(&self) -> f32 {
-        self.ch.offset_v
+    pub fn with_previous_values(mut self) -> Self {
+        self.hardware_offset_v = self.ch.hardware_offset_v;
+        self.gain_post = self.ch.gain_post;
+        self.range_v = (self.ch.min_output_v)..(self.ch.max_output_v);
+        self.amplitude_v = self.ch.get_amplitude_v().unwrap();
+        self.offset_v = self.ch.get_offset_v().unwrap();
+        self
     }
-    #[inline]
-    pub fn set_period(&mut self, period_s: f32) -> APIResult<()> {
-        self.ch.set_period(period_s)
-    }
-    #[inline]
-    pub fn increment_offset(&mut self, volts: f32) {
-        self.set_offset(volts + self.ch.offset_v);
-    }
-}
+    fn apply_base(&mut self) -> Result<(), ChannelInitializationError> {
+        if self.hardware_offset_v.is_nan()
+            || self.gain_post.is_nan()
+            || self.range_v.start.is_nan()
+            || self.range_v.end.is_nan()
+        {
+            return Err(ChannelInitializationError::NaNValue);
+        }
+        if self.gain_post.is_infinite() || self.hardware_offset_v.is_infinite() {
+            return Err(ChannelInitializationError::InfiniteValue);
+        }
+        if self.gain_post == 0.0 {
+            return Err(ChannelInitializationError::ZeroGain);
+        }
+        if self.range_v.is_empty() {
+            return Err(ChannelInitializationError::RangeInversion);
+        }
+        self.clamp_range();
+        if self.range_v.is_empty() {
+            return Err(ChannelInitializationError::RangeInaccessible);
+        }
+        self.ch.disable()?;
+        self.ch.hardware_offset_v = self.hardware_offset_v;
+        self.ch.gain_post = self.gain_post;
+        self.ch.min_output_v = self.range_v.start;
+        self.ch.max_output_v = self.range_v.end;
+        self.amplitude_v = self.amplitude_v.clamp(
+            // (self.range_v.start - self.range_v.end)/2.0,
+            0.0,
+            (self.range_v.end - self.range_v.start) / 2.0,
+        );
+        self.offset_v = self.offset_v.clamp(
+            self.range_v.start + self.amplitude_v.abs(),
+            self.range_v.end - self.amplitude_v.abs(),
+        );
 
-impl<'a> PulseChannel<'a> {
-    pub fn init(ch: &'a mut Channel, mut waveform: Vec<f32>, ampl_volts: f32) -> APIResult<Self> {
-        let last_value = waveform[waveform.len() - 1];
-        ch.set_arb_waveform(&mut waveform)?;
-        ch.set_mode(GenMode::Burst)?;
-        ch.set_burst_count(1)?;
-        ch.set_burst_repetitions(1)?;
-        ch.set_offset_v((ch.max_output_v - ch.min_output_v) / 2.0);
-        ch.set_burst_last_value((ch.ampl_v * last_value) + ch.offset_v);
-        let _ = ch.set_amplitude_v(ampl_volts);
-        ch.set_trigger_source(GenTriggerSource::ExternalRisingEdge);
-        Ok(PulseChannel {
-            ch,
-            waveform_last_value: last_value,
-        })
-    }
+        self.ch.set_freq(self.freq_hz)?;
+        self.ch.set_offset_v(self.offset_v)?;
+        self.ch.set_amplitude_v(self.amplitude_v)?;
 
-    #[inline]
-    pub fn enable(&mut self) -> APIResult<()> {
-        self.ch.enable()
-    }
-    #[inline]
-    pub fn disable(&mut self) -> APIResult<()> {
-        self.ch.disable()
-    }
-
-    #[inline]
-    #[must_use]
-    pub fn amplitude_v(&self) -> f32 {
-        self.ch.ampl_v
-    }
-    #[inline]
-    #[must_use]
-    pub fn offset_v(&self) -> f32 {
-        self.ch.offset_v
-    }
-
-    /// Disables the channel in question, then sets the given waveform. IMPORTANT: in order to use
-    /// the channel after this, you must call `.enable()` on it.
-    pub fn set_waveform(&mut self, waveform: &mut [f32]) -> APIResult<()> {
-        // self.ch.disable()?;
-        self.ch.set_arb_waveform(waveform)?;
-        thread::sleep(Duration::from_millis(50));
-        self.waveform_last_value = waveform[waveform.len() - 1];
-        self.set_amplitude(self.ch.ampl_v);
         Ok(())
     }
-    #[inline]
-    pub fn set_trigger_source(&mut self, source: GenTriggerSource) -> APIResult<()> {
-        self.ch.set_trigger_source(source)
+
+    fn clamp_range(&mut self) {
+        // Reduce the bounds limitation parameters to the values accessible by the Red Pitaya
+        // hardware. If both the specified bounds are, say, less than the minimum value accessible
+        // by the pitaya hardware, then this new range will be empty.
+        let neg_out = self.gain_post * (-1.0 + self.hardware_offset_v);
+        let pos_out = self.gain_post * (1.0 + self.hardware_offset_v);
+        let lower = neg_out.min(pos_out);
+        let upper = neg_out.max(pos_out);
+        self.range_v =
+            (self.range_v.start.clamp(lower, upper))..self.range_v.end.clamp(lower, upper);
     }
-    #[inline]
-    pub fn set_amplitude(&mut self, volts: f32) -> APIResult<()> {
-        let _ = self.ch.set_amplitude_v(volts);
-        self.set_offset(self.ch.offset_v)
+
+    #[must_use]
+    pub fn hardware_offset(mut self, volts: f32) -> Self {
+        self.hardware_offset_v = volts;
+        self
     }
-    #[inline]
-    pub fn set_offset(&mut self, volts: f32) -> APIResult<()> {
-        let volts_checked = self.ch.set_offset_v(volts);
+    #[must_use]
+    pub fn gain_post(mut self, gain: f32) -> Self {
+        self.gain_post = gain;
+        self
+    }
+    #[must_use]
+    pub fn output_range(mut self, lower: f32, upper: f32) -> Self {
+        self.range_v.start = lower;
+        self.range_v.end = upper;
+        self
+    }
+    #[must_use]
+    pub fn offset_v(mut self, offset_v: f32) -> Self {
+        self.offset_v = offset_v;
+        self
+    }
+    #[must_use]
+    pub fn freq_hz(mut self, freq_hz: f32) -> Self {
+        self.freq_hz = freq_hz;
+        self
+    }
+    #[must_use]
+    pub fn period_s(mut self, period_s: f32) -> Self {
+        self.freq_hz = 1.0 / period_s;
+        self
+    }
+    #[must_use]
+    pub fn enabled(mut self) -> Self {
+        self.enable = true;
+        self
+    }
+    #[must_use]
+    pub fn disabled(mut self) -> Self {
+        self.enable = false;
+        self
+    }
+    #[must_use]
+    pub fn enable(mut self, onoff: bool) -> Self {
+        self.enable = onoff;
+        self
+    }
+}
+
+impl<'a> ChannelBuilder<'a, Pulse> {
+    #[must_use]
+    pub fn waveform(mut self, wav: Vec<f32>) -> Self {
+        self.waveform = Some(wav);
+        self
+    }
+    #[must_use]
+    pub fn amplitude_v(mut self, amplitude_v: f32) -> Self {
+        self.amplitude_v = amplitude_v;
+        self
+    }
+    pub fn apply(mut self) -> Result<Channel<'a, Pulse>, ChannelInitializationError> {
+        self.apply_base()?;
+        let mut wav = self
+            .waveform
+            .ok_or(ChannelInitializationError::NoWaveform)?;
+        let last_value = wav.pop().ok_or(ChannelInitializationError::NoWaveform)?;
+        wav.push(last_value);
+
         self.ch
-            .set_burst_last_value((self.ch.ampl_v * self.waveform_last_value) + volts_checked)
+            .set_trigger_source(GenTriggerSource::ExternalRisingEdge)?;
+
+        self.ch.set_waveform_type(WaveformType::Arbitrary)?;
+        self.ch.set_arb_waveform(&mut wav)?;
+        self.ch.set_mode(GenMode::Burst)?;
+        self.ch.set_burst_count(1)?;
+        self.ch.set_burst_repetitions(1)?;
+        self.ch
+            .set_burst_last_value_v(self.amplitude_v * last_value + self.offset_v)?;
+        if self.enable {
+            self.ch.enable()?;
+        }
+        Ok(Channel {
+            raw_channel: self.ch,
+            ampl_v: self.amplitude_v,
+            offset_v: self.offset_v,
+            waveform_last_value: last_value,
+            _phantom: PhantomData::<Pulse>,
+        })
     }
-    #[inline]
-    pub fn increment_offset(&mut self, volts: f32) -> APIResult<()> {
-        self.set_offset(volts + self.ch.offset_v)
+}
+
+impl<'a> ChannelBuilder<'a, DC> {
+    pub fn apply(mut self) -> Result<Channel<'a, DC>, ChannelInitializationError> {
+        self.amplitude_v = 0.0;
+        self.apply_base()?;
+        let mut wav = vec![0f32; 8];
+        self.ch
+            .set_trigger_source(GenTriggerSource::ExternalRisingEdge)?;
+        self.ch.set_waveform_type(WaveformType::Arbitrary)?;
+        self.ch.set_arb_waveform(&mut wav)?;
+        self.ch.set_mode(GenMode::Burst)?;
+        self.ch.set_burst_count(1)?;
+        self.ch.set_burst_repetitions(1)?;
+        self.ch.set_burst_last_value_v(self.offset_v)?;
+        if self.enable {
+            self.ch.enable()?;
+        }
+        Ok(Channel {
+            raw_channel: self.ch,
+            ampl_v: self.amplitude_v,
+            offset_v: self.offset_v,
+            waveform_last_value: 0.0,
+            _phantom: PhantomData::<DC>,
+        })
     }
-    #[inline]
-    pub fn set_period(&mut self, period_s: f32) -> APIResult<()> {
-        self.ch.set_period(period_s)
+}
+impl<'a> ChannelBuilder<'a, Base> {
+    pub fn apply(mut self) -> Result<Channel<'a, Base>, ChannelInitializationError> {
+        self.apply_base()?;
+        if self.enable {
+            self.ch.enable()?;
+        }
+        Ok(Channel {
+            raw_channel: self.ch,
+            ampl_v: self.amplitude_v,
+            offset_v: self.offset_v,
+            waveform_last_value: 0.0,
+            _phantom: PhantomData::<Base>,
+        })
     }
 }

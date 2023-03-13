@@ -49,7 +49,25 @@ fn_ok!(rp_GenReset);
 fn_ok!(rp_GenOutEnable, (core_ch: rp_channel_t));
 fn_ok!(rp_GenOutDisable, (core_ch: rp_channel_t));
 fn_ok!(rp_GenAmp, (core_ch: rp_channel_t), (amplitude: f32));
+pub unsafe fn rp_GenGetAmp(channel: rp_channel_t, amplitude: *mut f32) -> ::std::os::raw::c_int {
+    *amplitude = 0.5;
+    if cfg!(feature = "no_api_loud") {
+        println!("[{}] rp_GenGetAmp", API_START_TIME.elapsed().as_secs_f32());
+    }
+    APIError::RP_OK as ::std::os::raw::c_int
+}
+
 fn_ok!(rp_GenOffset, (core_ch: rp_channel_t), (offset: f32));
+pub unsafe fn rp_GenGetOffset(channel: rp_channel_t, offset: *mut f32) -> ::std::os::raw::c_int {
+    *offset = 0.1;
+    if cfg!(feature = "no_api_loud") {
+        println!(
+            "[{}] rp_GenGetOffset",
+            API_START_TIME.elapsed().as_secs_f32()
+        );
+    }
+    APIError::RP_OK as ::std::os::raw::c_int
+}
 fn_ok!(rp_GenFreq, (core_ch: rp_channel_t), (frequency: f32));
 fn_ok!(
     rp_GenWaveform,

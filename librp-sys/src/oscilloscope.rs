@@ -8,7 +8,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::core;
-use crate::core::{APIError, APIError::RP_OK, APIResult, Channel};
+use crate::core::{APIError, APIError::RP_OK, APIResult, RPCoreChannel};
 use enum_primitive::*;
 use std::ptr::read_volatile;
 
@@ -269,7 +269,7 @@ impl Oscilloscope {
     /// # Panics
     /// Panics if the RP API returns a catastrophically wrong value
     #[allow(clippy::unnecessary_cast)]
-    pub fn get_scope_data_channel(&mut self, ch: Channel) -> APIResult<Vec<u32>> {
+    pub fn get_scope_data_channel(&mut self, ch: RPCoreChannel) -> APIResult<Vec<u32>> {
         let index = self.get_write_index_at_trigger()? as isize;
         let mut ret = Vec::with_capacity(self.region.num_points);
         for i in (self.region.skip_start..(BUFF_SIZE - self.region.skip_end))
@@ -278,8 +278,8 @@ impl Oscilloscope {
             ret.push(unsafe {
                 read_volatile(
                     match ch {
-                        Channel::CH_1 => self.chA_buff_raw,
-                        Channel::CH_2 => self.chB_buff_raw,
+                        RPCoreChannel::CH_1 => self.chA_buff_raw,
+                        RPCoreChannel::CH_2 => self.chB_buff_raw,
                     }
                     .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
                 )

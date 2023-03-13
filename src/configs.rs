@@ -371,8 +371,8 @@ pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     );
     match tomlget!(cfg, hostname, "ref_input_channel", as_str) {
         // match cfg.get(hostname)?.get("ref_input_channel")?.as_str()? {
-        "CH_1" | "CH_A" => out.input_channel = core::Channel::CH_1,
-        "CH_2" | "CH_B" => out.input_channel = core::Channel::CH_2,
+        "CH_1" | "CH_A" => out.input_channel = core::RPCoreChannel::CH_1,
+        "CH_2" | "CH_B" => out.input_channel = core::RPCoreChannel::CH_2,
         _ => {
             return Err("No valid input channel for reference laser found".into());
         }
@@ -380,8 +380,8 @@ pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     if is_master {
         match tomlget!(cfg, hostname, "ref_output_channel", as_str) {
             // match cfg.get(hostname)?.get("ref_output_channel")?.as_str()? {
-            "CH_1" | "CH_A" => out.output_channel = Some(core::Channel::CH_1),
-            "CH_2" | "CH_B" => out.output_channel = Some(core::Channel::CH_2),
+            "CH_1" | "CH_A" => out.output_channel = Some(core::RPCoreChannel::CH_1),
+            "CH_2" | "CH_B" => out.output_channel = Some(core::RPCoreChannel::CH_2),
             _ => {
                 return Err("No valid output channel for reference laser found".into());
             }
@@ -410,16 +410,16 @@ pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     );
     match tomlget!(cfg, hostname, "slave_input_channel", as_str) {
         // match cfg.get(hostname)?.get("ref_input_channel")?.as_str()? {
-        "CH_1" | "CH_A" => out.input_channel = core::Channel::CH_1,
-        "CH_2" | "CH_B" => out.input_channel = core::Channel::CH_2,
+        "CH_1" | "CH_A" => out.input_channel = core::RPCoreChannel::CH_1,
+        "CH_2" | "CH_B" => out.input_channel = core::RPCoreChannel::CH_2,
         _ => {
             return Err("No valid input channel for reference laser found".to_string());
         }
     };
     match tomlget!(cfg, hostname, "slave_output_channel", as_str) {
         // match cfg.get(hostname)?.get("ref_output_channel")?.as_str()? {
-        "CH_1" | "CH_A" => out.output_channel = Some(core::Channel::CH_1),
-        "CH_2" | "CH_B" => out.output_channel = Some(core::Channel::CH_2),
+        "CH_1" | "CH_A" => out.output_channel = Some(core::RPCoreChannel::CH_1),
+        "CH_2" | "CH_B" => out.output_channel = Some(core::RPCoreChannel::CH_2),
         _ => {
             return Err("No valid output channel for reference laser found".to_string());
         }
@@ -506,6 +506,11 @@ pub fn slave_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
     );
     out.err_max_tolerance = max_err_tolerance_MHz * 2.0 * PI
         / tomlget!(cfg, "general", "interferometer_FSR_MHz", as_float, f32);
+    out.default_output_voltage = cfg
+        .get(slave_laser_name)
+        .and_then(|x| x.get("default_output_voltage"))
+        .and_then(|x| x.as_float())
+        .map(|x| x as f32);
     Ok(out)
 }
 

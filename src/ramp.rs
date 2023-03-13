@@ -8,7 +8,9 @@
 use std::f32::consts::PI;
 
 use librp_sys::core::{APIResult, ADC_SAMPLE_RATE};
-use librp_sys::generator::{DCChannel, PulseChannel};
+use librp_sys::generator::{
+    Channel, ChannelBuilder, ChannelInitializationError, Pulse, RawChannel, DC,
+};
 use librp_sys::oscilloscope::Oscilloscope;
 
 #[derive(Debug)]
@@ -20,8 +22,11 @@ pub struct DaqSetup {
     pub amplitude_volts: f32,
     pub piezo_scale_factor: f32, // units of nm / Volt
     pub piezo_settle_time_ms: f32,
+
     ramp_period_us: u64,
     piezo_settle_time_us: u64,
+
+    slave_default_offset_v: Option<f32>,
 }
 
 impl DaqSetup {
@@ -37,19 +42,20 @@ impl DaqSetup {
             piezo_settle_time_ms: 2.0,
             ramp_period_us: 1_000_000,
             piezo_settle_time_us: 2000,
+            slave_default_offset_v: None,
         }
     }
 
     /// # Errors
     /// If an RP API call returns a failure code, this returns Err containing the failure.
-    /// # Panics
-    /// Panics if the RP API returns a catastrophically wrong value
-    pub fn apply(
+    // /// # Panics
+    // /// Panics if the RP API returns a catastrophically wrong value
+    pub fn apply<'a, 'b>(
         &mut self,
         osc: &mut Oscilloscope,
-        ref_ch: Option<&mut PulseChannel>,
-        slave_ch: &mut DCChannel,
-    ) -> APIResult<()> {
+        ref_ch: Option<&'a mut RawChannel>,
+        slave_ch: &'b mut RawChannel,
+    ) -> Result<(Option<Channel<'a, Pulse>>, Channel<'b, DC>), ChannelInitializationError> {
         // Create the voltage ramp waveform:
         let steps_up = (16384.0 * self.symmetry) as u16;
         let mut waveform = Vec::<f32>::with_capacity(16384);
@@ -63,15 +69,33 @@ impl DaqSetup {
         }
 
         osc.set_decimation(self.decimation)?;
-        if let Some(ref_ch) = ref_ch {
-            ref_ch.set_period(self.ramp_period_s)?;
-            ref_ch.set_amplitude(self.amplitude_volts)?;
-            ref_ch.set_waveform(&mut waveform);
-            ref_ch.enable()?;
+        let ref_out = if let Some(ref_ch) = ref_ch {
+            Some(
+                ChannelBuilder::new(ref_ch)
+                    .with_previous_values()
+                    .amplitude_v(self.amplitude_volts)
+                    .period_s(self.ramp_period_s)
+                    .waveform(waveform)
+                    .enabled()
+                    .apply()?,
+            )
+        } else {
+            None
+        };
+        let mut build = ChannelBuilder::<DC>::new(slave_ch).with_previous_values();
+        if let Some(x) = self.slave_default_offset_v {
+            build = build.offset_v(x);
         }
-        slave_ch.set_period(self.ramp_period_s / 2.0)?;
+        let slave_out = build
+            .period_s(self.ramp_period_s / 100.0)
+            .enabled()
+            .apply()?;
+        Ok((ref_out, slave_out))
+    }
 
-        Ok(())
+    pub fn slave_default_offset_v(&mut self, offset_v: Option<f32>) -> &mut Self {
+        self.slave_default_offset_v = offset_v;
+        self
     }
 
     pub fn piezo_scale_factor(&mut self, scale_factor: f32) -> &mut Self {
@@ -137,11 +161,5 @@ impl DaqSetup {
     pub fn amplitude(&mut self, volts: f32) -> &mut Self {
         self.amplitude_volts = volts;
         self
-    }
-}
-
-impl Default for DaqSetup {
-    fn default() -> Self {
-        DaqSetup::new()
     }
 }

@@ -74,7 +74,10 @@ impl InterfComms {
         (num_cycles & ((1 << self.logs_publish_frequency_exponent) - 1)) == 0
     }
 
-    pub async fn handle_socket_request(&mut self, interf: &mut Interferometer) -> Option<String> {
+    pub async fn handle_socket_request<'a>(
+        &mut self,
+        interf: &mut Interferometer,
+    ) -> Option<String> {
         let cmd_msg = self.command_sock.recv().now_or_never()?.ok()?;
         let cmd = str::from_utf8(cmd_msg.get(0)?).ok()?;
         let _ = if let Ok(s) = interf.process_command(cmd.split(':')) {
@@ -120,7 +123,7 @@ impl InterfComms {
 
     /// # Errors
     /// Propagates any zeromq error in the socket send operation.
-    pub async fn publish_logs(&mut self, interf: &mut Interferometer) -> zeromq::ZmqResult<()> {
+    pub async fn publish_logs<'a>(&mut self, interf: &mut Interferometer) -> zeromq::ZmqResult<()> {
         let mut msg: zeromq::ZmqMessage = self.hostname.clone().into();
 
         msg.push_back(interf.cycle_counter.to_le_bytes().to_vec().into());

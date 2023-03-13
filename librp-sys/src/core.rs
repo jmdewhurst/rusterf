@@ -87,7 +87,7 @@ pub type APIResult<T> = Result<T, APIError>;
 enum_from_primitive! {
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-pub enum Channel {
+pub enum RPCoreChannel {
     CH_1 = 0,
     CH_2,
 }
