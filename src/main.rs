@@ -8,6 +8,7 @@
 
 use std::f32::consts::PI;
 use std::fs::read_to_string;
+use std::path::Path;
 use std::str::FromStr;
 use std::thread::spawn;
 use std::time::Instant;
@@ -24,6 +25,7 @@ use librp_sys::{core, oscilloscope};
 
 use rusterf::configs;
 use rusterf::multifit;
+use rusterf::util::find_file;
 
 // mod lib;
 // use lib::laser::Laser;
@@ -46,14 +48,10 @@ async fn main() {
         .reset()
         .expect("Failed to reset rp function generator");
 
-    let path_base = env::current_exe().expect("Failed to get the path to this program");
-    println!(
-        "Reading config file {}",
-        path_base.with_file_name("config.toml").display()
-    );
+    let cfg_file = find_file(Path::new("config.toml")).expect("Failed to find configuration file!");
+    println!("Reading from config file {cfg_file:?}");
 
-    let cfg_text = read_to_string(path_base.with_file_name("config.toml"))
-        .expect("Failed to open config file!");
+    let cfg_text = read_to_string(cfg_file).expect("Failed to open config file!");
     let cfg = toml::from_str(&cfg_text).expect("Failed to parse config file");
     let mut interf = match configs::interferometer_from_config(&cfg) {
         Ok(x) => x,
@@ -202,9 +200,6 @@ async fn main() {
                 }
             }
         }
-        while let Some(request) = interf_comms.handle_socket_request(&mut interf).await {
-            println!("[{}] Handled socket request <{}>", Local::now(), request);
-        }
 
         if DO_DEBUG_LOGGING && interf.cycle_counter & ((1 << DEBUG_LOG_FREQ_LOG) - 1) == 0 {
             let denom = 2.0_f32.powi(DEBUG_LOG_FREQ_LOG.into());
@@ -252,7 +247,9 @@ async fn main() {
         loop {
             if triggered.elapsed().as_nanos() > interf.ramp_setup.rise_time_ns() {
                 break;
-            };
+            } else if let Some(request) = interf_comms.handle_socket_request(&mut interf).await {
+                println!("[{}] Handled socket request <{}>", Local::now(), request);
+            }
         }
         let _ = pit.scope.update_scope_data_both();
         if interf.is_master() {
@@ -304,10 +301,11 @@ async fn main() {
         slave_out_ch.adjust_offset(slave_adjustment);
 
         interf.ref_laser.phase_log.push(ref_error);
-        interf
-            .ref_laser
-            .feedback_log
-            .push(ramp_ch.as_ref().map_or(0.0, |x| x.offset()));
+        interf.ref_laser.feedback_log.push(
+            ramp_ch
+                .as_ref()
+                .map_or(0.0, librp_sys::generator::Channel::offset),
+        );
         interf.slave_laser.phase_log.push(slave_error);
         interf.slave_laser.feedback_log.push(slave_out_ch.offset());
 

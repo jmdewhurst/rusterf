@@ -21,97 +21,9 @@ use crate::multifit::FitSetup;
 use super::laser::Laser;
 use super::lock::Servo;
 use super::ramp::DaqSetup;
+use super::util::{tomlget, tomlget_or};
 use super::{communications::InterfComms, interferometer::Interferometer};
 
-macro_rules! tomlget_or {
-    ($cfg:ident, $sec:expr, $key:expr, $conv:ident, $as:ty, $or:expr) => {
-        $cfg.get($sec)
-            .and_then(|sec| sec.get($key))
-            .map(|val| val.$conv())
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "failed to find {}:{} in config; proceeding with default {:?}",
-                    $sec, $key, $or
-                );
-                Some($or)
-            })
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "failed to convert {}:{} to {}; proceeding with default {:?}",
-                    $sec,
-                    $key,
-                    stringify!($as),
-                    $or
-                );
-                $or
-            }) as $as
-    };
-    ($cfg:ident, $sec:expr, $key:expr, as_str, $or:expr) => {
-        $cfg.get($sec)
-            .and_then(|sec| sec.get($key))
-            .map(|val| val.as_str())
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "failed to get {}:{} in config; proceeding with default {:?}",
-                    $sec, $key, $or
-                );
-                Some($or)
-            })
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "failed to convert {}:{} to string; proceeding with default {:?}",
-                    $sec, $key, $or
-                );
-                $or
-            })
-    };
-    ($cfg:ident, $sec:expr, $key:expr, as_bool, $or:expr) => {
-        $cfg.get($sec)
-            .and_then(|sec| sec.get($key))
-            .map(|val| val.as_bool())
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "failed to convert {}:{} to bool; proceeding with default {:?}",
-                    $sec, $key, $or
-                );
-                Some($or)
-            })
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "failed to get {}:{} in config; proceeding with default {:?}",
-                    $sec, $key, $or
-                );
-                $or
-            })
-    };
-}
-macro_rules! tomlget {
-    ($cfg:ident, $sec:expr, $key:expr, $conv:ident, $as:ty) => {
-        $cfg.get($sec)
-            .ok_or_else(|| format!("failed to get section {}", $sec))?
-            .get($key)
-            .ok_or_else(|| format!("failed to get key {}:{}", $sec, $key))?
-            .$conv()
-            .ok_or_else(|| format!("failed to convert {}:{} to {}", $sec, $key, stringify!($as)))?
-            as $as
-    };
-    ($cfg:ident, $sec:expr, $key:expr, as_str) => {
-        $cfg.get($sec)
-            .ok_or_else(|| format!("failed to get section {}", $sec))?
-            .get($key)
-            .ok_or_else(|| format!("failed to get key {}:{}", $sec, $key))?
-            .as_str()
-            .ok_or_else(|| format!("failed to convert {}:{} to string", $sec, $key))?
-    };
-    ($cfg:ident, $sec:expr, $key:expr, as_bool) => {
-        $cfg.get($sec)
-            .ok_or_else(|| format!("failed to get section {}", $sec))?
-            .get($key)
-            .ok_or_else(|| format!("failed to get key {}:{}", $sec, $key))?
-            .as_bool()
-            .ok_or_else(|| format!("failed to convert {}:{} to boolean", $sec, $key))?
-    };
-}
 pub fn floor_exp(num: u64) -> u8 {
     let mut exp = 63;
     while (1 << exp) & num == 0 {
@@ -266,6 +178,14 @@ pub async fn comms_from_config(cfg: &toml::Value) -> Result<InterfComms, String>
     )
     .await
     .map_err(|e| format!("error [{}] in binding sockets", e))?;
+    out.set_log_publish_frequency(tomlget_or!(
+        cfg,
+        "general",
+        "logs_publish_freq_cycles",
+        as_integer,
+        u32,
+        256
+    ));
     Ok(out)
 }
 

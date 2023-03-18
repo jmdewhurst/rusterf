@@ -6,3 +6,4 @@ pub mod lock;
 pub mod multifit;
 pub mod ramp;
 pub mod ring_buffer;
+pub mod util;
