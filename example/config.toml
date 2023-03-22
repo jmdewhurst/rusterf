@@ -36,6 +36,7 @@ gain_i = 0.003
 gain_d = 0.0
 integral_decay_rate = 0.85
 feedback_max_step_size_v = 0.01
+max_err_tolerance_MHz = 20.0
 
 lockpoint_adjustment_stepsize_MHz = 1.0
 lockpoint_adjustment_cycle_sec = 1.0
@@ -48,8 +49,9 @@ gain_i = 0.003
 gain_d = 0.0
 integral_decay_rate = 0.85
 feedback_max_step_size_v = 0.01
+max_err_tolerance_MHz = 20.0
 
-lockpoint_adjustment_stepsize_MHz = 2
+lockpoint_adjustment_stepsize_MHz = 4
 lockpoint_adjustment_cycle_sec = 0.5
 
 plot_color = "00ff80"
@@ -62,8 +64,9 @@ gain_i = 0.003
 gain_d = 0.0
 integral_decay_rate = 0.85
 feedback_max_step_size_v = 0.01
+max_err_tolerance_MHz = 20.0
 
-lockpoint_adjustment_stepsize_MHz = 2
+lockpoint_adjustment_stepsize_MHz = 4
 lockpoint_adjustment_cycle_sec = 0.5
 
 plot_color = "00b0ff"
