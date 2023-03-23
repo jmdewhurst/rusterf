@@ -162,7 +162,7 @@ impl FitSetup {
             eprintln!("{} iterations", raw_result.niter);
         }
 
-        let params = [
+        let mut params = [
             (raw_result.params[0] * raw_result.params[0]
                 + raw_result.params[1] * raw_result.params[1])
                 .sqrt(),
@@ -170,6 +170,11 @@ impl FitSetup {
             raw_result.params[1].atan2(raw_result.params[0]),
             raw_result.params[3],
         ];
+
+        if params[1] < 0.0 {
+            params[1] *= -1.0;
+            params[2] *= -1.0;
+        }
 
         let low_contrast = params[0] < self.low_contrast_threshold;
 
