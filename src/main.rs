@@ -8,6 +8,7 @@
 
 use std::f32::consts::PI;
 use std::fs::read_to_string;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::str::FromStr;
 use std::thread::spawn;
@@ -16,6 +17,7 @@ use std::{env, thread, time};
 
 // use rand::distributions::{Distribution, Uniform};
 
+use async_std::task::block_on;
 use chrono::Local;
 
 use librp_sys::dpin;
@@ -193,10 +195,19 @@ async fn main() {
         }
 
         if interf_comms.should_publish_logs(interf.cycle_counter) {
-            match interf_comms.publish_logs(&mut interf).await {
-                Ok(()) => {}
-                Err(x) => {
+            let mut wrap_comms = AssertUnwindSafe(&mut interf_comms);
+            let mut wrap_interf = AssertUnwindSafe(&mut interf);
+            match catch_unwind(move || block_on(wrap_comms.publish_logs(&mut wrap_interf))) {
+                Ok(Ok(())) => {}
+                Ok(Err(x)) => {
                     eprintln!("[{}] Failed to publish logs: error [{}]", Local::now(), x);
+                }
+                Err(_) => {
+                    eprintln!("[{}] Panic in publish_logs", Local::now());
+                    interf_comms.unbind_sockets().await;
+                    interf_comms
+                        .bind_sockets(interf_comms.logs_port(), interf_comms.command_port())
+                        .await;
                 }
             }
         }

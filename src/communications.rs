@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 // use std::io::Read;
 
+use async_std::task::block_on;
 use bytes::Bytes;
 use chrono::Local;
 use futures::future::FutureExt;
@@ -10,6 +11,7 @@ use zeromq::prelude::*;
 use super::configs::floor_exp;
 use super::interferometer::Interferometer;
 
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::str;
 
 fn iterf32_to_bytes<C>(collection: C) -> Bytes
@@ -63,6 +65,15 @@ impl InterfComms {
         })
     }
 
+    #[must_use]
+    pub fn logs_port(&self) -> u16 {
+        self.logs_port
+    }
+    #[must_use]
+    pub fn command_port(&self) -> u16 {
+        self.command_port
+    }
+
     pub fn set_log_publish_frequency(&mut self, num_cycles: u32) {
         // round `num_cycles` down to the nearest power of 2
         self.logs_publish_frequency_exponent = floor_exp(num_cycles as u64);
@@ -78,7 +89,14 @@ impl InterfComms {
         &mut self,
         interf: &mut Interferometer,
     ) -> Option<String> {
-        let cmd_msg = self.command_sock.recv().now_or_never()?.ok()?;
+        let mut wrap = AssertUnwindSafe(&mut self.command_sock);
+        let cmd_msg = catch_unwind(move || wrap.recv().now_or_never())
+            .map_err(|_| {
+                block_on(self.unbind_sockets());
+                block_on(self.bind_sockets(self.logs_port, self.command_port));
+            })
+            .ok()??
+            .ok()?;
         let cmd = str::from_utf8(cmd_msg.get(0)?).ok()?;
         let _ = if let Ok(s) = interf.process_command(cmd.split(':')) {
             self.command_sock.send(s.into()).await
