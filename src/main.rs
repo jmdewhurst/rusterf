@@ -235,11 +235,19 @@ async fn main() {
         // if the last fit got a suspicious result, we should reset our ''guess'' parameters
         // to try to avoid getting stuck fitting to a bad mode. Also just reset the guess
         // occasionally just in case.
-        let reset_timer = interf.cycle_counter & ((1 << 12) - 1) == 0;
-        if reset_timer || last_ref_result.as_ref().map_or(false, |r| r.low_contrast) {
+        let reset_timer = interf.cycle_counter & ((1 << 16) - 1) == 0;
+        if reset_timer
+            || last_ref_result
+                .as_ref()
+                .map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
+        {
             interf.ref_laser.fit_coefficients = [0.0, interf.ref_laser.fringe_freq(), 0.0, 1000.0];
         }
-        if reset_timer || last_slave_result.as_ref().map_or(false, |r| r.low_contrast) {
+        if reset_timer
+            || last_slave_result
+                .as_ref()
+                .map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
+        {
             interf.slave_laser.fit_coefficients =
                 [0.0, interf.slave_laser.fringe_freq(), 0.0, 1000.0];
         }

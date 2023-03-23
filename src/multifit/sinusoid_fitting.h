@@ -28,6 +28,7 @@ typedef struct {
   int gsl_status;
   int niter;
   float params[4];
+	float chisq;
 } multifit_result_raw_t;
 
 typedef struct {

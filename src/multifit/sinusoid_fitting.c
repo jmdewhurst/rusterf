@@ -158,6 +158,14 @@ multifit_result_raw_t do_fitting(multifit_setup_t *setup,
   }
   result.gsl_status = status;
   result.niter = gsl_multifit_nlinear_niter(setup->work);
+
+  // calculate chi_squared
+  gsl_vector *f;
+  double chisq;
+  f = gsl_multifit_nlinear_residual(setup->work);
+  gsl_blas_ddot(f, f, &chisq);
+  result.chisq = (float)chisq;
+
   // fprintf(stderr, "reason for stopping: %s\n",
   //         (info == 1) ? "small step size" : "small gradient");
   return result;

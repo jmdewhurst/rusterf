@@ -51,6 +51,7 @@ struct FitResultRaw {
     gsl_status: c_int,
     niter: c_int,
     params: [f32; 4],
+    chisq: f32,
 }
 
 #[derive(Debug)]
@@ -59,6 +60,8 @@ pub struct FitResult {
     pub n_iterations: i32,
     pub params: [f32; 4],
     pub low_contrast: bool,
+    pub chisq: f32,
+    pub dof: u32,
 }
 
 // opaque structs handled on the C side
@@ -175,6 +178,8 @@ impl FitSetup {
             n_iterations: raw_result.niter,
             params,
             low_contrast,
+            chisq: raw_result.chisq,
+            dof: self.num_points - 4,
         }
     }
 
@@ -216,6 +221,8 @@ impl FitSetup {
             n_iterations: raw_result.niter,
             params: raw_result.params,
             low_contrast,
+            chisq: raw_result.chisq,
+            dof: self.num_points - 4,
         }
     }
 }
