@@ -154,8 +154,8 @@ async fn main() {
         .build()
         .unwrap();
 
-    let mut last_ref_result: Option<multifit::FitResult> = None;
-    let mut last_slave_result: Option<multifit::FitResult> = None;
+    let mut last_ref_result: Option<multifit::FitResultFive> = None;
+    let mut last_slave_result: Option<multifit::FitResultFive> = None;
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
@@ -256,7 +256,8 @@ async fn main() {
         if reset_timer
             || last_ref_result.map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
         {
-            interf.ref_laser.fit_coefficients = [0.0, interf.ref_laser.fringe_freq(), 0.0, 1000.0];
+            interf.ref_laser.fit_coefficients =
+                [0.0, interf.ref_laser.fringe_freq(), 0.0, 0.0, 1000.0];
         }
         if reset_timer
             || last_slave_result
@@ -264,7 +265,7 @@ async fn main() {
                 .map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
         {
             interf.slave_laser.fit_coefficients =
-                [0.0, interf.slave_laser.fringe_freq(), 0.0, 1000.0];
+                [0.0, interf.slave_laser.fringe_freq(), 0.0, 0.0, 1000.0];
         }
 
         loop {
@@ -283,13 +284,13 @@ async fn main() {
         // Can also accomplish this with a 'scoped thread'
         let (ref_result, slave_result) = rayon_pool.join(
             || {
-                interf.fit_setup_ref.fit(
+                interf.fit_setup_ref.fit_five_parameter(
                     data_ch!(interf.ref_laser, pit).as_slice(),
                     interf.ref_laser.fit_coefficients,
                 )
             },
             || {
-                interf.fit_setup_slave.fit(
+                interf.fit_setup_slave.fit_five_parameter(
                     data_ch!(interf.slave_laser, pit).as_slice(),
                     interf.slave_laser.fit_coefficients,
                 )

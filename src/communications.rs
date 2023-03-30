@@ -154,8 +154,6 @@ impl InterfComms {
         msg.push_back(vecu32_to_bytes(&interf.last_waveform_ref));
         msg.push_back(vecu32_to_bytes(&interf.last_waveform_slave));
 
-        println!("ref fit {:?}", interf.ref_laser.fit_coefficients);
-
         msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
         msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
 

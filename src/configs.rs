@@ -311,7 +311,7 @@ pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     }
 
     // fill in ``guess'' fit coefficients for the lasers
-    out.fit_coefficients = [0.0, out.fringe_freq(), 0.0, 1000.0];
+    out.fit_coefficients = [0.0, out.fringe_freq(), 0.0, 0.0, 1000.0];
     Ok(out)
 }
 pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
@@ -346,7 +346,7 @@ pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     };
 
     // fill in ``guess'' fit coefficients for the lasers
-    out.fit_coefficients = [0.0, out.fringe_freq(), 0.0, 1000.0];
+    out.fit_coefficients = [0.0, out.fringe_freq(), 0.0, 0.0, 1000.0];
     Ok(out)
 }
 
@@ -461,6 +461,33 @@ pub fn multifit_from_config(cfg: &toml::Value) -> Result<FitSetup, String> {
     );
     Ok(out)
 }
+pub fn multifit_from_config_5(cfg: &toml::Value) -> Result<FitSetup, String> {
+    let num_points = (16384
+        - tomlget_or!(cfg, "multifit", "samples_skip_start", as_integer, u32, 6000)
+        - tomlget_or!(cfg, "multifit", "samples_skip_end", as_integer, u32, 0)
+        + tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40)
+        - 1)
+        / tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40);
+    let mut out = FitSetup::init_five_parameter(
+        tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40),
+        num_points,
+        tomlget_or!(cfg, "multifit", "max_iterations", as_integer, u32, 32),
+        tomlget_or!(cfg, "multifit", "xtol", as_float, f32, 1.0e-8),
+        tomlget_or!(cfg, "multifit", "gtol", as_float, f32, 1.0e-8),
+        tomlget_or!(cfg, "multifit", "ftol", as_float, f32, 1.0e-8),
+        tomlget_or!(cfg, "multifit", "max_av_ratio", as_float, f32, 1.5),
+    )
+    .ok_or_else(|| "Failed to instantiate FitSetup struct".to_string())?;
+    out.low_contrast_threshold = tomlget_or!(
+        cfg,
+        "multifit",
+        "low_contrast_threshold",
+        as_float,
+        f32,
+        100.0
+    );
+    Ok(out)
+}
 
 pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, String> {
     let mut out = Interferometer::new().ok_or("failed to instantiate interferometer struct")?;
@@ -470,8 +497,8 @@ pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, S
     out.slave_laser = slave_laser_from_config(cfg)?;
     out.ref_lock = ref_lock_from_config(cfg)?;
     out.slave_lock = slave_lock_from_config(cfg)?;
-    out.fit_setup_ref = multifit_from_config(cfg)?;
-    out.fit_setup_slave = multifit_from_config(cfg)?;
+    out.fit_setup_ref = multifit_from_config_5(cfg)?;
+    out.fit_setup_slave = multifit_from_config_5(cfg)?;
     Ok(out)
 }
 

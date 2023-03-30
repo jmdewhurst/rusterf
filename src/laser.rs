@@ -12,7 +12,7 @@ pub struct Laser {
     wavelength_nm: f32,
     pub input_channel: core::RPCoreChannel,
     pub output_channel: Option<core::RPCoreChannel>,
-    pub fit_coefficients: [f32; 4],
+    pub fit_coefficients: [f32; 5],
     fringe_freq: f32,
     pub phase_log: DyadicRingBuffer<f32>,
     pub feedback_log: DyadicRingBuffer<f32>,
@@ -26,7 +26,7 @@ impl Laser {
             input_channel: core::RPCoreChannel::CH_1,
             output_channel: None,
             fringe_freq: 1.0,
-            fit_coefficients: [0.0, 0.0, 0.0, 0.0],
+            fit_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0],
             phase_log: DyadicRingBuffer::new(n)?,
             feedback_log: DyadicRingBuffer::new(n)?,
         })
