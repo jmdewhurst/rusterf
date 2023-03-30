@@ -65,7 +65,6 @@ int sinusoid_quadratic_df(const gsl_vector *x, void *params, gsl_matrix *J) {
   multifit_data_5_t *data = params;
   uint32_t n = data->num_points;
 
-  printf("about to break...\n");
   FIT_FLOAT_TYPE A_cos = gsl_vector_get(x, 0);
   FIT_FLOAT_TYPE A_sin = gsl_vector_get(x, 1);
   FIT_FLOAT_TYPE freq = gsl_vector_get(x, 2);
@@ -145,8 +144,7 @@ multifit_result_raw_t do_fitting(multifit_setup_t *setup,
 }
 multifit_result_raw_t do_fitting_5(multifit_setup_t *setup,
                                    multifit_data_5_t data) {
-  int p = setup->fdf->p;
-  for (int i = 0; i < p; i++) {
+  for (int i = 0; i < 5; i++) {
     gsl_vector_set(setup->guess, i, data.guess[i]);
   }
   int info;
@@ -157,7 +155,7 @@ multifit_result_raw_t do_fitting_5(multifit_setup_t *setup,
                                            setup->gtol, setup->ftol, NULL, NULL,
                                            &info, setup->work);
   gsl_vector *coef = gsl_multifit_nlinear_position(setup->work);
-  for (int i = 0; i < p; i++) {
+  for (int i = 0; i < 5; i++) {
     result.params[i] = gsl_vector_get(coef, i);
   }
   result.gsl_status = status;

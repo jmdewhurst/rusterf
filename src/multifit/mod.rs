@@ -89,6 +89,7 @@ pub struct FitResultFive {
     pub low_contrast: bool,
     pub chisq: f32,
     pub dof: u32,
+    pub invalid_params: bool,
 }
 
 // opaque structs handled on the C side
@@ -286,6 +287,7 @@ impl FitSetup {
                     .expect("the library function gsl_strerror should return a valid C-style string (with static lifetime)")
             });
             eprintln!("{} iterations", raw_result.niter);
+            eprintln!("{raw_result:?}");
         }
 
         let mut params = [
@@ -305,6 +307,13 @@ impl FitSetup {
 
         let low_contrast = params[0] < self.low_contrast_threshold;
 
+        let mut invalid = false;
+        for i in &raw_result.params {
+            if i.is_nan() || i.is_infinite() {
+                invalid = true;
+            };
+        }
+
         FitResultFive {
             gsl_status: raw_result.gsl_status,
             n_iterations: raw_result.niter,
@@ -312,6 +321,7 @@ impl FitSetup {
             low_contrast,
             chisq: raw_result.chisq,
             dof: self.num_points - 4,
+            invalid_params: invalid,
         }
     }
 }

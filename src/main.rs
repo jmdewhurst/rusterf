@@ -242,10 +242,12 @@ async fn main() {
             total_err_slave = 0.0;
             variance_slave = 0.0;
             if let Some(res) = last_ref_result {
-                print!("\tchisq/dof: ref {},", res.chisq / res.dof as f32);
+                println!("ref fit {:?}", res.params);
+                println!("\tchisq/dof: ref {},", res.chisq / res.dof as f32);
             }
             if let Some(res) = last_slave_result {
-                println!(" slave {}", res.chisq / res.dof as f32);
+                println!("slave fit {:?}", res.params);
+                println!("slave chisq/dof {}", res.chisq / res.dof as f32);
             }
         }
 
@@ -254,15 +256,17 @@ async fn main() {
         // occasionally just in case.
         let reset_timer = interf.cycle_counter & ((1 << 16) - 1) == 0;
         if reset_timer
-            || last_ref_result.map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
+            || last_ref_result.map_or(false, |r| {
+                r.low_contrast || r.invalid_params || r.chisq > (1000 * r.dof) as f32
+            })
         {
             interf.ref_laser.fit_coefficients =
                 [0.0, interf.ref_laser.fringe_freq(), 0.0, 0.0, 1000.0];
         }
         if reset_timer
-            || last_slave_result
-                .as_ref()
-                .map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
+            || last_slave_result.as_ref().map_or(false, |r| {
+                r.low_contrast || r.invalid_params || r.chisq > (1000 * r.dof) as f32
+            })
         {
             interf.slave_laser.fit_coefficients =
                 [0.0, interf.slave_laser.fringe_freq(), 0.0, 0.0, 1000.0];
