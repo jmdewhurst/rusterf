@@ -154,8 +154,8 @@ async fn main() {
         .build()
         .unwrap();
 
-    let last_ref_result: Option<multifit::FitResult> = None;
-    let last_slave_result: Option<multifit::FitResult> = None;
+    let mut last_ref_result: Option<multifit::FitResult> = None;
+    let mut last_slave_result: Option<multifit::FitResult> = None;
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
@@ -241,6 +241,12 @@ async fn main() {
             variance_ref = 0.0;
             total_err_slave = 0.0;
             variance_slave = 0.0;
+            if let Some(res) = last_ref_result {
+                print!("\tchisq/dof: ref {},", res.chisq / res.dof as f32);
+            }
+            if let Some(res) = last_slave_result {
+                println!(" slave {}", res.chisq / res.dof as f32);
+            }
         }
 
         // if the last fit got a suspicious result, we should reset our ''guess'' parameters
@@ -248,9 +254,7 @@ async fn main() {
         // occasionally just in case.
         let reset_timer = interf.cycle_counter & ((1 << 16) - 1) == 0;
         if reset_timer
-            || last_ref_result
-                .as_ref()
-                .map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
+            || last_ref_result.map_or(false, |r| r.low_contrast || r.chisq > (1000 * r.dof) as f32)
         {
             interf.ref_laser.fit_coefficients = [0.0, interf.ref_laser.fringe_freq(), 0.0, 1000.0];
         }
@@ -328,8 +332,8 @@ async fn main() {
         interf.slave_laser.phase_log.push(slave_error);
         interf.slave_laser.feedback_log.push(slave_out_ch.offset());
 
-        let last_ref_result = Some(ref_result);
-        let last_slave_result = Some(slave_result);
+        last_ref_result = Some(ref_result);
+        last_slave_result = Some(slave_result);
 
         if interf_comms.should_publish_logs(interf.cycle_counter + 4) {
             // Ideally we'd always send the most recent waveform, but we handle communications

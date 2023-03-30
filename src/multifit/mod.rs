@@ -45,7 +45,7 @@ struct DataRaw {
     guess: [f32; 4],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 struct FitResultRaw {
     gsl_status: c_int,
@@ -54,7 +54,7 @@ struct FitResultRaw {
     chisq: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct FitResult {
     pub gsl_status: i32,
     pub n_iterations: i32,
