@@ -15,6 +15,7 @@ fn main() {
         .file("src/multifit/sinusoid_fitting.c")
         .include("/usr/include/")
         .static_flag(true)
+        .opt_level(3)
         .compile("sinusoid_fitting");
 }
 
