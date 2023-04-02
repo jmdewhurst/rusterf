@@ -68,7 +68,7 @@ int sinusoid_quadratic_df(const gsl_vector *x, void *params, gsl_matrix *J) {
   FIT_FLOAT_TYPE A_cos = gsl_vector_get(x, 0);
   FIT_FLOAT_TYPE A_sin = gsl_vector_get(x, 1);
   FIT_FLOAT_TYPE freq = gsl_vector_get(x, 2);
-  FIT_FLOAT_TYPE quad = gsl_vector_get(x, 5);
+  FIT_FLOAT_TYPE quad = gsl_vector_get(x, 3);
 
   for (unsigned int i = 0; i < n; i++) {
     float iflt = i;
@@ -142,13 +142,13 @@ multifit_result_raw_t do_fitting(multifit_setup_t *setup,
   //         (info == 1) ? "small step size" : "small gradient");
   return result;
 }
-multifit_result_raw_t do_fitting_5(multifit_setup_t *setup,
-                                   multifit_data_5_t data) {
+multifit_result_raw_5_t do_fitting_5(multifit_setup_t *setup,
+                                     multifit_data_5_t data) {
   for (int i = 0; i < 5; i++) {
     gsl_vector_set(setup->guess, i, data.guess[i]);
   }
   int info;
-  multifit_result_raw_t result;
+  multifit_result_raw_5_t result;
   setup->fdf->params = &data;
   gsl_multifit_nlinear_init(setup->guess, setup->fdf, setup->work);
   int status = gsl_multifit_nlinear_driver(setup->max_iterations, setup->xtol,

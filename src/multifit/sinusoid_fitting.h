@@ -78,6 +78,6 @@ uint32_t init_multifit_setup(multifit_setup_t *setup);
 uint32_t init_multifit_setup_5(multifit_setup_t *setup);
 void release_multifit_resources(multifit_setup_t *setup);
 multifit_result_raw_t do_fitting(multifit_setup_t *setup, multifit_data_t data);
-multifit_result_raw_t do_fitting_5(multifit_setup_t *setup,
-                                   multifit_data_5_t data);
+multifit_result_raw_5_t do_fitting_5(multifit_setup_t *setup,
+                                     multifit_data_5_t data);
 #endif

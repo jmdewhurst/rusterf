@@ -270,7 +270,7 @@ impl FitSetup {
             guess[0] * guess[2].cos(),
             guess[0] * guess[2].sin(),
             guess[1] * self.skip_rate as f32,
-            guess[3],
+            guess[3] * (self.skip_rate * self.skip_rate) as f32,
             guess[4],
         ];
         let data_struct = DataRawFive {
@@ -296,7 +296,7 @@ impl FitSetup {
                 .sqrt(),
             raw_result.params[2] / self.skip_rate as f32,
             raw_result.params[1].atan2(raw_result.params[0]),
-            raw_result.params[3],
+            raw_result.params[3] / (self.skip_rate * self.skip_rate) as f32,
             raw_result.params[4],
         ];
 
