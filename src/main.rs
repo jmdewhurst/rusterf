@@ -197,7 +197,14 @@ async fn main() {
         if interf_comms.should_publish_logs(interf.cycle_counter) {
             let mut wrap_comms = AssertUnwindSafe(&mut interf_comms);
             let mut wrap_interf = AssertUnwindSafe(&mut interf);
-            match catch_unwind(move || block_on(wrap_comms.publish_logs(&mut wrap_interf))) {
+            match catch_unwind(move || {
+                block_on(wrap_comms.publish_logs(
+                    &mut wrap_interf,
+                    total_fitting_time_us >> DEBUG_LOG_FREQ_LOG,
+                    last_ref_result.map(|x| x.reduced_chisq()),
+                    last_slave_result.map(|x| x.reduced_chisq()),
+                ))
+            }) {
                 Ok(Ok(())) => {}
                 Ok(Err(x)) => {
                     eprintln!("[{}] Failed to publish logs: error [{}]", Local::now(), x);
@@ -217,7 +224,7 @@ async fn main() {
             println!(
                 "[{}] average fitting time {} us",
                 Local::now(),
-                total_fitting_time_us >> 9
+                total_fitting_time_us >> DEBUG_LOG_FREQ_LOG
             );
             total_fitting_time_us = 0;
             println!(
@@ -243,11 +250,11 @@ async fn main() {
             variance_slave = 0.0;
             if let Some(res) = last_ref_result {
                 println!("ref fit {:?}", res.params);
-                println!("\tchisq/dof: ref {},", res.chisq / res.dof as f32);
+                println!("\tchisq/dof: ref {},", res.reduced_chisq() as f32);
             }
             if let Some(res) = last_slave_result {
                 println!("slave fit {:?}", res.params);
-                println!("slave chisq/dof {}", res.chisq / res.dof as f32);
+                println!("slave chisq/dof {}", res.reduced_chisq() as f32);
             }
         }
 

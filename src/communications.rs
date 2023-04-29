@@ -141,7 +141,13 @@ impl InterfComms {
 
     /// # Errors
     /// Propagates any zeromq error in the socket send operation.
-    pub async fn publish_logs<'a>(&mut self, interf: &mut Interferometer) -> zeromq::ZmqResult<()> {
+    pub async fn publish_logs<'a>(
+        &mut self,
+        interf: &mut Interferometer,
+        avg_fitting_time_us: u32,
+        ref_red_chisq: Option<f32>,
+        slave_red_chisq: Option<f32>,
+    ) -> zeromq::ZmqResult<()> {
         let mut msg: zeromq::ZmqMessage = self.hostname.clone().into();
 
         msg.push_back(interf.cycle_counter.to_le_bytes().to_vec().into());
@@ -156,6 +162,10 @@ impl InterfComms {
 
         msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
         msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
+
+        msg.push_back(avg_fitting_time_us.to_le_bytes().to_vec().into());
+        msg.push_back(ref_red_chisq.unwrap_or(0.0).to_le_bytes().to_vec().into());
+        msg.push_back(slave_red_chisq.unwrap_or(0.0).to_le_bytes().to_vec().into());
 
         self.logs_sock.send(msg).await
     }

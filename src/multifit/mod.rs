@@ -92,6 +92,14 @@ pub struct FitResultFive {
     pub invalid_params: bool,
 }
 
+impl FitResultFive {
+    #[inline]
+    #[must_use]
+    pub fn reduced_chisq(&self) -> f32 {
+        self.chisq / self.dof as f32
+    }
+}
+
 // opaque structs handled on the C side
 enum Workspace {}
 enum MultifitFDF {}
@@ -320,7 +328,7 @@ impl FitSetup {
             params,
             low_contrast,
             chisq: raw_result.chisq,
-            dof: self.num_points - 4,
+            dof: self.num_points - 5,
             invalid_params: invalid,
         }
     }
