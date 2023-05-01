@@ -178,28 +178,6 @@ async fn main() {
                 .set_state(ready_to_acquire_pin, dpin::PinState::High);
         }
 
-        if interf_comms.should_publish_logs(interf.cycle_counter) {
-            match catch_unwind(AssertUnwindSafe(|| {
-                block_on(interf_comms.publish_logs(
-                    &mut interf,
-                    last_ref_result.map(|x| x.reduced_chisq()),
-                    last_slave_result.map(|x| x.reduced_chisq()),
-                ))
-            })) {
-                Ok(Ok(())) => {}
-                Ok(Err(x)) => {
-                    eprintln!("[{}] Failed to publish logs: error [{}]", Local::now(), x);
-                }
-                Err(_) => {
-                    eprintln!("[{}] Panic in publish_logs", Local::now());
-                    let _ = interf_comms.unbind_sockets().await;
-                    let _ = interf_comms
-                        .bind_sockets(interf_comms.logs_port(), interf_comms.command_port())
-                        .await;
-                }
-            }
-        }
-
         if DEBUG_LOG_FREQ_LOG != 0 && interf.cycle_counter & ((1 << DEBUG_LOG_FREQ_LOG) - 1) == 0 {
             let stats = interf.stats.evauluate();
             let denom = 2.0_f32.powi(DEBUG_LOG_FREQ_LOG as i32);
@@ -223,8 +201,31 @@ async fn main() {
                 println!("slave fit {:?}", res.params);
                 println!("slave chisq/dof {}", res.reduced_chisq() as f32);
             }
+        }
+
+        if interf_comms.should_publish_logs(interf.cycle_counter) {
+            match catch_unwind(AssertUnwindSafe(|| {
+                block_on(interf_comms.publish_logs(
+                    &mut interf,
+                    last_ref_result.map(|x| x.reduced_chisq()),
+                    last_slave_result.map(|x| x.reduced_chisq()),
+                ))
+            })) {
+                Ok(Ok(())) => {}
+                Ok(Err(x)) => {
+                    eprintln!("[{}] Failed to publish logs: error [{}]", Local::now(), x);
+                }
+                Err(_) => {
+                    eprintln!("[{}] Panic in publish_logs", Local::now());
+                    let _ = interf_comms.unbind_sockets().await;
+                    let _ = interf_comms
+                        .bind_sockets(interf_comms.logs_port(), interf_comms.command_port())
+                        .await;
+                }
+            }
             interf.stats.reset();
         }
+
 
         // if the last fit got a suspicious result, we should reset our ''guess'' parameters
         // to try to avoid getting stuck fitting to a bad mode. Also just reset the guess
@@ -292,6 +293,8 @@ async fn main() {
                 ref_result.n_iterations as u32,
                 slave_result.n_iterations as u32,
             );
+        interf.ref_laser.fit_coefficients = ref_result.params;
+        interf.slave_laser.fit_coefficients = slave_result.params;
 
         let ref_adjustment = interf.ref_lock.do_pid(ref_error);
         let slave_adjustment = interf.slave_lock.do_pid(slave_error);
