@@ -15,22 +15,16 @@ use std::thread::spawn;
 use std::time::Instant;
 use std::{env, thread, time};
 
-// use rand::distributions::{Distribution, Uniform};
-
 use async_std::task::block_on;
 use chrono::Local;
 
 use librp_sys::dpin;
-// use librp_sys::generator::{DCChannel, PulseChannel};
 use librp_sys::Pitaya;
 use librp_sys::{core, oscilloscope};
 
 use rusterf::configs;
 use rusterf::multifit;
 use rusterf::util::find_file;
-
-// mod lib;
-// use lib::laser::Laser;
 
 macro_rules! data_ch {
     ($laser:expr, $pit:ident) => {
@@ -63,20 +57,17 @@ async fn main() {
         Ok(x) => x,
         Err(e) => panic!("[{}] error [{}] in reading config file", Local::now(), e),
     };
+    interf
+        .stats
+        .set_averaging(1 << interf_comms.logs_publish_frequency_exponent());
 
-    let DO_DEBUG_LOGGING;
-    let DEBUG_LOG_FREQ_LOG;
-    if let Some(toml::Value::Integer(freq)) = cfg
-        .get("general")
-        .expect("already read in interferometer_from_config")
-        .get("debug_list_freq_cycles")
-    {
-        DO_DEBUG_LOGGING = true;
-        DEBUG_LOG_FREQ_LOG = configs::floor_exp(*freq as u64);
-    } else {
-        DO_DEBUG_LOGGING = false;
-        DEBUG_LOG_FREQ_LOG = 0;
-    }
+    let DEBUG_LOG_FREQ_LOG = (|| {
+        cfg.get("general")?
+            .get("debug_list_freq_cycles")?
+            .as_integer()?
+            .checked_ilog2()
+    })()
+    .unwrap_or_default();
 
     if interf.is_master() {
         println!("Designated as MASTER RP; controlling interferometer voltage ramp");
@@ -141,13 +132,6 @@ async fn main() {
 
     let mut triggered: Instant;
     let mut fit_started: Instant;
-    let mut total_fitting_time_us: u32 = 0;
-    let mut total_err_ref: f32 = 0.0;
-    let mut variance_ref: f32 = 0.0;
-    let mut total_err_slave: f32 = 0.0;
-    let mut variance_slave: f32 = 0.0;
-    let mut iterations_ref = 0;
-    let mut iterations_slave = 0;
 
     let rayon_pool = rayon::ThreadPoolBuilder::new()
         .num_threads(2)
@@ -168,7 +152,7 @@ async fn main() {
         if interf.is_master() {
             loop {
                 if let Ok(dpin::PinState::Low) = pit.dpin.get_state(ready_to_acquire_pin) {
-                    pit.dpin.set_state(trigger_pin, dpin::PinState::High);
+                    let _ = pit.dpin.set_state(trigger_pin, dpin::PinState::High);
                     break;
                 };
             }
@@ -195,59 +179,42 @@ async fn main() {
         }
 
         if interf_comms.should_publish_logs(interf.cycle_counter) {
-            let mut wrap_comms = AssertUnwindSafe(&mut interf_comms);
-            let mut wrap_interf = AssertUnwindSafe(&mut interf);
-            match catch_unwind(move || {
-                block_on(wrap_comms.publish_logs(
-                    &mut wrap_interf,
-                    total_fitting_time_us >> DEBUG_LOG_FREQ_LOG,
+            match catch_unwind(AssertUnwindSafe(|| {
+                block_on(interf_comms.publish_logs(
+                    &mut interf,
                     last_ref_result.map(|x| x.reduced_chisq()),
                     last_slave_result.map(|x| x.reduced_chisq()),
                 ))
-            }) {
+            })) {
                 Ok(Ok(())) => {}
                 Ok(Err(x)) => {
                     eprintln!("[{}] Failed to publish logs: error [{}]", Local::now(), x);
                 }
                 Err(_) => {
                     eprintln!("[{}] Panic in publish_logs", Local::now());
-                    interf_comms.unbind_sockets().await;
-                    interf_comms
+                    let _ = interf_comms.unbind_sockets().await;
+                    let _ = interf_comms
                         .bind_sockets(interf_comms.logs_port(), interf_comms.command_port())
                         .await;
                 }
             }
         }
 
-        if DO_DEBUG_LOGGING && interf.cycle_counter & ((1 << DEBUG_LOG_FREQ_LOG) - 1) == 0 {
-            let denom = 2.0_f32.powi(DEBUG_LOG_FREQ_LOG.into());
-            println!(
-                "[{}] average fitting time {} us",
-                Local::now(),
-                total_fitting_time_us >> DEBUG_LOG_FREQ_LOG
-            );
-            total_fitting_time_us = 0;
+        if DEBUG_LOG_FREQ_LOG != 0 && interf.cycle_counter & ((1 << DEBUG_LOG_FREQ_LOG) - 1) == 0 {
+            let stats = interf.stats.evauluate();
+            let denom = 2.0_f32.powi(DEBUG_LOG_FREQ_LOG as i32);
             println!(
                 "\taverage iterations per fit cycle: [ref: {:.2}, slave: {:.2}]",
-                iterations_ref as f32 / denom,
-                iterations_slave as f32 / denom,
+                stats.avg_iterations_ref, stats.avg_iterations_slave,
             );
-            iterations_ref = 0;
-            iterations_slave = 0;
             println!(
                 "\taverage phase error (rad): [ref: {:.2}, slave: {:.2}]",
-                total_err_ref / denom,
-                total_err_slave / denom,
+                stats.avg_err_ref, stats.avg_err_slave,
             );
             println!(
                 "\tRMS phase error (rad): [ref: {:.4}, slave: {:.4}]",
-                (variance_ref / denom).sqrt(),
-                (variance_slave / denom).sqrt(),
+                stats.variance_ref, stats.variance_slave,
             );
-            total_err_ref = 0.0;
-            variance_ref = 0.0;
-            total_err_slave = 0.0;
-            variance_slave = 0.0;
             if let Some(res) = last_ref_result {
                 println!("ref fit {:?}", res.params);
                 println!("\tchisq/dof: ref {},", res.reduced_chisq() as f32);
@@ -256,12 +223,13 @@ async fn main() {
                 println!("slave fit {:?}", res.params);
                 println!("slave chisq/dof {}", res.reduced_chisq() as f32);
             }
+            interf.stats.reset();
         }
 
         // if the last fit got a suspicious result, we should reset our ''guess'' parameters
         // to try to avoid getting stuck fitting to a bad mode. Also just reset the guess
         // occasionally just in case.
-        let reset_timer = interf.cycle_counter & ((1 << 16) - 1) == 0;
+        let reset_timer = interf.cycle_counter & ((1 << 12) - 1) == 0;
         if reset_timer
             || last_ref_result.map_or(false, |r| {
                 r.low_contrast || r.invalid_params || r.chisq > (1000 * r.dof) as f32
@@ -296,23 +264,17 @@ async fn main() {
         let (ref_result, slave_result) = rayon_pool.join(
             || {
                 interf.fit_setup_ref.fit_five_parameter(
-                    data_ch!(interf.ref_laser, pit).as_slice(),
+                    data_ch!(interf.ref_laser, pit),
                     interf.ref_laser.fit_coefficients,
                 )
             },
             || {
                 interf.fit_setup_slave.fit_five_parameter(
-                    data_ch!(interf.slave_laser, pit).as_slice(),
+                    data_ch!(interf.slave_laser, pit),
                     interf.slave_laser.fit_coefficients,
                 )
             },
         );
-        total_fitting_time_us += fit_started.elapsed().as_micros() as u32;
-        iterations_ref += ref_result.n_iterations;
-        iterations_slave += slave_result.n_iterations;
-
-        interf.ref_laser.fit_coefficients = ref_result.params;
-        interf.slave_laser.fit_coefficients = slave_result.params;
 
         let ref_error =
             multifit::wrapped_angle_difference(ref_result.params[2], interf.ref_lock.setpoint());
@@ -322,10 +284,14 @@ async fn main() {
                     / interf.slave_laser.wavelength_nm(),
             interf.slave_lock.setpoint(),
         );
-        total_err_ref += ref_error;
-        variance_ref += ref_error * ref_error;
-        total_err_slave += slave_error;
-        variance_slave += slave_error * slave_error;
+        interf
+            .stats
+            .new_time_us(fit_started.elapsed().as_micros() as u32)
+            .new_errs(ref_error, slave_error)
+            .new_iterations(
+                ref_result.n_iterations as u32,
+                slave_result.n_iterations as u32,
+            );
 
         let ref_adjustment = interf.ref_lock.do_pid(ref_error);
         let slave_adjustment = interf.slave_lock.do_pid(slave_error);
@@ -333,7 +299,7 @@ async fn main() {
         if ramp_ch.is_some() {
             let _ = ramp_ch.as_mut().unwrap().adjust_offset(ref_adjustment);
         }
-        slave_out_ch.adjust_offset(slave_adjustment);
+        let _ = slave_out_ch.adjust_offset(slave_adjustment);
 
         interf.ref_laser.phase_log.push(ref_error);
         interf.ref_laser.feedback_log.push(
@@ -347,7 +313,7 @@ async fn main() {
         last_ref_result = Some(ref_result);
         last_slave_result = Some(slave_result);
 
-        if interf_comms.should_publish_logs(interf.cycle_counter + 4) {
+        if interf_comms.should_publish_logs(interf.cycle_counter + 2) {
             // Ideally we'd always send the most recent waveform, but we handle communications
             // while the scope is acquiring, i.e. while the most recent waveform is being written in
             // memory. Instead, we have to copy the waveform ahead of time, but this large of a

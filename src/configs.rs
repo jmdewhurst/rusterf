@@ -24,14 +24,6 @@ use super::ramp::DaqSetup;
 use super::util::{tomlget, tomlget_or};
 use super::{communications::InterfComms, interferometer::Interferometer};
 
-pub fn floor_exp(num: u64) -> u8 {
-    let mut exp = 63;
-    while (1 << exp) & num == 0 {
-        exp -= 1;
-    }
-    exp
-}
-
 pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(), String> {
     let hostname = gethostname()
         .into_string()
@@ -57,7 +49,8 @@ pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(
         tomlget_or!(cfg, hostname, "ch_1_min_output_v", as_float, f32, -1.0),
         tomlget_or!(cfg, hostname, "ch_1_max_output_v", as_float, f32, 1.0),
     );
-    gen.ch_a
+    let _ = gen
+        .ch_a
         .set_trigger_source(librp_sys::generator::GenTriggerSource::ExternalRisingEdge);
     // gen.ch_a.enable();
     gen.ch_b.set_hw_offset_v(tomlget_or!(
@@ -80,7 +73,8 @@ pub fn generator_from_config(cfg: &toml::Value, gen: &mut Generator) -> Result<(
         tomlget_or!(cfg, hostname, "ch_2_min_output_v", as_float, f32, -1.0),
         tomlget_or!(cfg, hostname, "ch_2_max_output_v", as_float, f32, 1.0),
     );
-    gen.ch_b
+    let _ = gen
+        .ch_b
         .set_trigger_source(librp_sys::generator::GenTriggerSource::ExternalRisingEdge);
     // gen.ch_b.enable();
     Ok(())
@@ -254,7 +248,7 @@ fn buff_size_exponent(cfg: &toml::Value) -> usize {
         .and_then(|x| x.get("pitaya_log_length"))
         .and_then(toml::Value::as_integer)
     {
-        let buffer_size_exponent = (length as f32).log2().floor() as usize;
+        let buffer_size_exponent = length.checked_ilog2().unwrap_or(0) as usize;
         if buffer_size_exponent != length as usize {
             eprintln!(
                 "WARN: config explicit log length parameter {} rounded down to 2^{} = {}.",
@@ -500,21 +494,4 @@ pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, S
     out.fit_setup_ref = multifit_from_config_5(cfg)?;
     out.fit_setup_slave = multifit_from_config_5(cfg)?;
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn floor_exp_test() {
-        assert_eq!(floor_exp(1), 0);
-        assert_eq!(floor_exp(2), 1);
-        assert_eq!(floor_exp(3), 1);
-        assert_eq!(floor_exp(4), 2);
-        assert_eq!(floor_exp(2048), 11);
-        assert_eq!(floor_exp(2049), 11);
-        assert_eq!(floor_exp(4095), 11);
-        assert_eq!(floor_exp(4096), 12);
-    }
 }

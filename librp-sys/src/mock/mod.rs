@@ -49,6 +49,7 @@ fn_ok!(rp_GenReset);
 fn_ok!(rp_GenOutEnable, (core_ch: rp_channel_t));
 fn_ok!(rp_GenOutDisable, (core_ch: rp_channel_t));
 fn_ok!(rp_GenAmp, (core_ch: rp_channel_t), (amplitude: f32));
+#[allow(unused_variables)]
 pub unsafe fn rp_GenGetAmp(channel: rp_channel_t, amplitude: *mut f32) -> ::std::os::raw::c_int {
     *amplitude = 0.5;
     if cfg!(feature = "no_api_loud") {
@@ -58,6 +59,7 @@ pub unsafe fn rp_GenGetAmp(channel: rp_channel_t, amplitude: *mut f32) -> ::std:
 }
 
 fn_ok!(rp_GenOffset, (core_ch: rp_channel_t), (offset: f32));
+#[allow(unused_variables)]
 pub unsafe fn rp_GenGetOffset(channel: rp_channel_t, offset: *mut f32) -> ::std::os::raw::c_int {
     *offset = 0.1;
     if cfg!(feature = "no_api_loud") {

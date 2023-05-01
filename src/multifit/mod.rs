@@ -4,7 +4,7 @@
 // crate, even if they're publicly exported and used in the binary crate.
 #![allow(dead_code)]
 
-use std::f32::consts::PI;
+
 use std::ffi::{c_char, c_int, CStr};
 use std::os::raw::c_float;
 use std::ptr::{self, null_mut};

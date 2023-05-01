@@ -7,7 +7,7 @@
 #![allow(clippy::module_name_repetitions)]
 use std::f32::consts::PI;
 
-use librp_sys::core::{APIResult, ADC_SAMPLE_RATE};
+use librp_sys::core::{ADC_SAMPLE_RATE};
 use librp_sys::generator::{
     Channel, ChannelBuilder, ChannelInitializationError, Pulse, RawChannel, DC,
 };

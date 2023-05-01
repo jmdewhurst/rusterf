@@ -1,14 +1,12 @@
 #![warn(clippy::pedantic)]
 // use std::io::Read;
 
-use async_std::task::block_on;
 use bytes::Bytes;
 use chrono::Local;
 use futures::future::FutureExt;
 use gethostname::gethostname;
 use zeromq::prelude::*;
 
-use super::configs::floor_exp;
 use super::interferometer::Interferometer;
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -41,13 +39,6 @@ pub struct InterfComms {
     logs_publish_frequency_exponent: u8,
 }
 
-// fn vf32_to_u8(v: &[f32]) -> &[u8] {
-//     unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 4) }
-// }
-// fn vu32_to_u8(v: &[u32]) -> &[u8] {
-//     unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 4) }
-// }
-
 impl InterfComms {
     #[must_use]
     pub fn new() -> Option<Self> {
@@ -65,18 +56,26 @@ impl InterfComms {
         })
     }
 
+    #[inline]
     #[must_use]
     pub fn logs_port(&self) -> u16 {
         self.logs_port
     }
+    #[inline]
     #[must_use]
     pub fn command_port(&self) -> u16 {
         self.command_port
     }
 
+    #[inline]
+    #[must_use]
+    pub fn logs_publish_frequency_exponent(&self) -> u8 {
+        self.logs_publish_frequency_exponent
+    }
+
     pub fn set_log_publish_frequency(&mut self, num_cycles: u32) {
         // round `num_cycles` down to the nearest power of 2
-        self.logs_publish_frequency_exponent = floor_exp(num_cycles as u64);
+        self.logs_publish_frequency_exponent = num_cycles.checked_ilog2().unwrap_or(0) as u8;
     }
 
     #[inline]
@@ -89,11 +88,10 @@ impl InterfComms {
         &mut self,
         interf: &mut Interferometer,
     ) -> Option<String> {
-        let mut wrap = AssertUnwindSafe(&mut self.command_sock);
-        let cmd_msg = catch_unwind(move || wrap.recv().now_or_never())
-            .map_err(|_| {
-                block_on(self.unbind_sockets());
-                block_on(self.bind_sockets(self.logs_port, self.command_port));
+        let cmd_msg = catch_unwind(AssertUnwindSafe(|| self.command_sock.recv().now_or_never()))
+            .map_err(|_| async {
+                let _ = self.unbind_sockets().await;
+                let _ = self.bind_sockets(self.logs_port, self.command_port).await;
             })
             .ok()??
             .ok()?;
@@ -107,44 +105,11 @@ impl InterfComms {
         Some(cmd.to_string())
     }
 
-    /// Poll the command socket, and handle a command if one is queued up. Returns Some()
-    /// containing the text of the message if one was found, or None if polling failed or there
-    /// was no message to be processed, or we failed to handle the command.
-    //pub fn handle_socket_request(&mut self, interf: &mut Interferometer) -> Option<&str> {
-    //    //TODO: switch return type to Result<&str,zmq::Error> ?
-    //    match self.command_sock.poll(zmq::POLLIN, 0) {
-    //        Err(_x) => None,
-    //        Ok(0) => None,
-    //        Ok(_x) => {
-    //            self.command_sock.recv(&mut self.msg_incoming, 0).ok()?;
-    //            match interf.process_command(
-    //                self.msg_incoming
-    //                    .as_str()
-    //                    .expect("already checked .ok()")
-    //                    .split(':'),
-    //            ) {
-    //                Ok(None) => self.command_sock.send("", 0).ok()?,
-    //                Ok(Some(s)) => self.command_sock.send(&s, 0).ok()?,
-    //                Err(_) => {
-    //                    eprintln!(
-    //                        "[{}] failed to process command [{}]",
-    //                        Local::now(),
-    //                        self.msg_incoming.as_str().expect("already checked .ok()")
-    //                    );
-    //                    self.command_sock.send("", 0).ok()?;
-    //                }
-    //            };
-    //            return Some(self.msg_incoming.as_str().expect("already checked .ok()"));
-    //        }
-    //    }
-    //}
-
     /// # Errors
     /// Propagates any zeromq error in the socket send operation.
-    pub async fn publish_logs<'a>(
+    pub async fn publish_logs(
         &mut self,
         interf: &mut Interferometer,
-        avg_fitting_time_us: u32,
         ref_red_chisq: Option<f32>,
         slave_red_chisq: Option<f32>,
     ) -> zeromq::ZmqResult<()> {
@@ -163,56 +128,19 @@ impl InterfComms {
         msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
         msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
 
-        msg.push_back(avg_fitting_time_us.to_le_bytes().to_vec().into());
-        msg.push_back(ref_red_chisq.unwrap_or(0.0).to_le_bytes().to_vec().into());
-        msg.push_back(slave_red_chisq.unwrap_or(0.0).to_le_bytes().to_vec().into());
+        let stats = interf.stats.evauluate();
+
+        let mut stats_vec = Vec::with_capacity(20);
+        stats_vec.extend(stats.avg_fitting_time_us.to_le_bytes());
+        stats_vec.extend(stats.avg_iterations_ref.to_le_bytes());
+        stats_vec.extend(stats.avg_iterations_slave.to_le_bytes());
+        stats_vec.extend(ref_red_chisq.unwrap_or(0.0).to_le_bytes());
+        stats_vec.extend(slave_red_chisq.unwrap_or(0.0).to_le_bytes());
+
+        msg.push_back(stats_vec.into());
 
         self.logs_sock.send(msg).await
     }
-
-    /// # Errors
-    /// In case of any zmq error, aborts early and returns the error.
-    // pub fn publish_logs(&mut self, interf: &mut Interferometer) -> Result<(), zeromq::Error> {
-    //     self.logs_sock.send(&self.hostname, zmq::SNDMORE)?;
-    //     self.logs_sock
-    //         .send(interf.cycle_counter.to_le_bytes().as_slice(), zmq::SNDMORE)?;
-
-    //     // syntax is a mess, but I think doing it this way avoids unnecessary allocations.
-    //     // want to ensure that ``outgoing_values`` has enough space to hold the phase logs
-    //     self.outgoing_buffer.clear();
-    //     self.outgoing_buffer
-    //         .reserve_exact(interf.ref_laser.phase_log.len());
-
-    //     // consider switching these to manual overwriting to avoid unnecessary clears
-    //     self.outgoing_buffer.extend(&interf.ref_laser.phase_log);
-    //     self.logs_sock
-    //         .send(vf32_to_u8(&self.outgoing_buffer), zmq::SNDMORE)?;
-    //     self.outgoing_buffer.clear();
-    //     self.outgoing_buffer.extend(&interf.slave_laser.phase_log);
-    //     self.logs_sock
-    //         .send(vf32_to_u8(&self.outgoing_buffer), zmq::SNDMORE)?;
-    //     self.outgoing_buffer.clear();
-    //     self.outgoing_buffer.extend(&interf.ref_laser.feedback_log);
-    //     self.logs_sock
-    //         .send(vf32_to_u8(&self.outgoing_buffer), zmq::SNDMORE)?;
-    //     self.outgoing_buffer.clear();
-    //     self.outgoing_buffer
-    //         .extend(&interf.slave_laser.feedback_log);
-    //     self.logs_sock
-    //         .send(vf32_to_u8(&self.outgoing_buffer), zmq::SNDMORE)?;
-
-    //     self.logs_sock
-    //         .send(vu32_to_u8(&interf.last_waveform_ref), zmq::SNDMORE)?;
-    //     self.logs_sock
-    //         .send(vu32_to_u8(&interf.last_waveform_slave), zmq::SNDMORE)?;
-
-    //     self.logs_sock
-    //         .send(vf32_to_u8(&interf.ref_laser.fit_coefficients), zmq::SNDMORE)?;
-    //     self.logs_sock
-    //         .send(vf32_to_u8(&interf.slave_laser.fit_coefficients), 0)?;
-
-    //     Ok(())
-    // }
 
     /// # Errors
     /// In case of any zmq error, aborts early and returns the error.
