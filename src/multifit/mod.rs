@@ -4,7 +4,6 @@
 // crate, even if they're publicly exported and used in the binary crate.
 #![allow(dead_code)]
 
-
 use std::ffi::{c_char, c_int, CStr};
 use std::os::raw::c_float;
 use std::ptr::{self, null_mut};
@@ -55,7 +54,7 @@ struct DataRawFive {
     guess: [f32; 5],
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Copy, Clone)]
 #[repr(C)]
 struct FitResultRaw {
     gsl_status: c_int,
@@ -63,7 +62,7 @@ struct FitResultRaw {
     params: [f32; 4],
     chisq: f32,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Copy, Clone)]
 #[repr(C)]
 struct FitResultRawFive {
     gsl_status: c_int,
@@ -72,7 +71,7 @@ struct FitResultRawFive {
     chisq: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct FitResult {
     pub gsl_status: i32,
     pub n_iterations: i32,
@@ -81,7 +80,7 @@ pub struct FitResult {
     pub chisq: f32,
     pub dof: u32,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct FitResultFive {
     pub gsl_status: i32,
     pub n_iterations: i32,
@@ -167,15 +166,10 @@ impl FitSetup {
     /// data of different length than the configured `FitSetup`
     #[allow(clippy::cast_precision_loss)]
     pub fn fit(&mut self, data: &[f32], guess: [f32; 4]) -> FitResult {
-        if cfg!(debug_assertions) {
-            assert!(
-                data.len() == self.num_points as usize,
-                "Cannot fit to data of length != configured number of points"
-            );
-        } else if data.len() != self.num_points as usize {
-            let data = &data[..data.len().min(self.num_points as usize)];
-            eprintln!("[{}] function multifit::fit recieved data of length {} not equal to the configured length {}", Local::now(), data.len(), self.num_points);
-        }
+        assert!(
+            data.len() == self.num_points as usize,
+            "Cannot fit to data of length != configured number of points"
+        );
         let guess_internal = [
             guess[0] * guess[2].cos(),
             guess[0] * guess[2].sin(),
@@ -265,15 +259,10 @@ impl FitSetup {
     /// data of different length than the configured `FitSetup`
     #[allow(clippy::cast_precision_loss)]
     pub fn fit_five_parameter(&mut self, data: &[f32], guess: [f32; 5]) -> FitResultFive {
-        if cfg!(debug_assertions) {
-            assert!(
-                data.len() == self.num_points as usize,
-                "Cannot fit to data of length != configured number of points"
-            );
-        } else if data.len() != self.num_points as usize {
-            let data = &data[..data.len().min(self.num_points as usize)];
-            eprintln!("[{}] function multifit::fit recieved data of length {} not equal to the configured length {}", Local::now(), data.len(), self.num_points);
-        }
+        assert!(
+            data.len() == self.num_points as usize,
+            "Cannot fit to data of length != configured number of points"
+        );
         let guess_internal = [
             guess[0] * guess[2].cos(),
             guess[0] * guess[2].sin(),

@@ -75,7 +75,7 @@ impl CumulativeStatistics {
         self
     }
 
-    pub fn evauluate(&mut self) -> Statistics {
+    pub fn evaluate(&mut self) -> Statistics {
         Statistics {
             avg_fitting_time_us: self.stats.avg_fitting_time_us / self.averaging,
             avg_err_ref: self.stats.avg_err_ref / self.averaging.get() as f32,

@@ -138,8 +138,8 @@ async fn main() {
         .build()
         .unwrap();
 
-    let mut last_ref_result: Option<multifit::FitResultFive> = None;
-    let mut last_slave_result: Option<multifit::FitResultFive> = None;
+    let mut last_ref_result: multifit::FitResultFive = Default::default();
+    let mut last_slave_result: multifit::FitResultFive = Default::default();
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
@@ -179,7 +179,7 @@ async fn main() {
         }
 
         if DEBUG_LOG_FREQ_LOG != 0 && interf.cycle_counter & ((1 << DEBUG_LOG_FREQ_LOG) - 1) == 0 {
-            let stats = interf.stats.evauluate();
+            let stats = interf.stats.evaluate();
             let denom = 2.0_f32.powi(DEBUG_LOG_FREQ_LOG as i32);
             println!(
                 "\taverage iterations per fit cycle: [ref: {:.2}, slave: {:.2}]",
@@ -193,22 +193,18 @@ async fn main() {
                 "\tRMS phase error (rad): [ref: {:.4}, slave: {:.4}]",
                 stats.variance_ref, stats.variance_slave,
             );
-            if let Some(res) = last_ref_result {
-                println!("ref fit {:?}", res.params);
-                println!("\tchisq/dof: ref {},", res.reduced_chisq() as f32);
-            }
-            if let Some(res) = last_slave_result {
-                println!("slave fit {:?}", res.params);
-                println!("slave chisq/dof {}", res.reduced_chisq() as f32);
-            }
+            println!("ref fit {:?}", last_ref_result.params);
+            println!("\tchisq/dof: ref {},", last_ref_result.reduced_chisq());
+            println!("slave fit {:?}", last_slave_result.params);
+            println!("slave chisq/dof {}", last_slave_result.reduced_chisq());
         }
 
         if interf_comms.should_publish_logs(interf.cycle_counter) {
             match catch_unwind(AssertUnwindSafe(|| {
                 block_on(interf_comms.publish_logs(
                     &mut interf,
-                    last_ref_result.map(|x| x.reduced_chisq()),
-                    last_slave_result.map(|x| x.reduced_chisq()),
+                    last_ref_result.reduced_chisq(),
+                    last_slave_result.reduced_chisq(),
                 ))
             })) {
                 Ok(Ok(())) => {}
@@ -226,23 +222,22 @@ async fn main() {
             interf.stats.reset();
         }
 
-
         // if the last fit got a suspicious result, we should reset our ''guess'' parameters
         // to try to avoid getting stuck fitting to a bad mode. Also just reset the guess
         // occasionally just in case.
         let reset_timer = interf.cycle_counter & ((1 << 12) - 1) == 0;
         if reset_timer
-            || last_ref_result.map_or(false, |r| {
-                r.low_contrast || r.invalid_params || r.chisq > (1000 * r.dof) as f32
-            })
+            || last_ref_result.low_contrast
+            || last_ref_result.invalid_params
+            || last_ref_result.chisq > (1000 * last_slave_result.dof) as f32
         {
             interf.ref_laser.fit_coefficients =
                 [0.0, interf.ref_laser.fringe_freq(), 0.0, 0.0, 1000.0];
         }
         if reset_timer
-            || last_slave_result.as_ref().map_or(false, |r| {
-                r.low_contrast || r.invalid_params || r.chisq > (1000 * r.dof) as f32
-            })
+            || last_slave_result.low_contrast
+            || last_slave_result.invalid_params
+            || last_slave_result.chisq > (1000 * last_slave_result.dof) as f32
         {
             interf.slave_laser.fit_coefficients =
                 [0.0, interf.slave_laser.fringe_freq(), 0.0, 0.0, 1000.0];
@@ -299,9 +294,7 @@ async fn main() {
         let ref_adjustment = interf.ref_lock.do_pid(ref_error);
         let slave_adjustment = interf.slave_lock.do_pid(slave_error);
 
-        if ramp_ch.is_some() {
-            let _ = ramp_ch.as_mut().unwrap().adjust_offset(ref_adjustment);
-        }
+        let _ = ramp_ch.as_mut().map(|x| x.adjust_offset(ref_adjustment));
         let _ = slave_out_ch.adjust_offset(slave_adjustment);
 
         interf.ref_laser.phase_log.push(ref_error);
@@ -313,8 +306,8 @@ async fn main() {
         interf.slave_laser.phase_log.push(slave_error);
         interf.slave_laser.feedback_log.push(slave_out_ch.offset());
 
-        last_ref_result = Some(ref_result);
-        last_slave_result = Some(slave_result);
+        last_ref_result = ref_result;
+        last_slave_result = slave_result;
 
         if interf_comms.should_publish_logs(interf.cycle_counter + 2) {
             // Ideally we'd always send the most recent waveform, but we handle communications

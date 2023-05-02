@@ -6,7 +6,7 @@ fn main() {
     let out_dir = std::env::var("OUT_DIR").expect("failed to get OUT_DIR");
     let target = std::env::var("TARGET").expect("failed to get TARGET");
 
-    cargo_messages(&out_dir, &target);
+    cargo_messages(&target);
 
     if !Path::new(&format!("{out_dir}/config.toml")).exists() {
         Command::new(format!("sh -c cp examples/config.toml {out_dir}/")).exec();
@@ -19,7 +19,7 @@ fn main() {
         .compile("sinusoid_fitting");
 }
 
-fn cargo_messages(out_dir: &str, target: &str) {
+fn cargo_messages(target: &str) {
     println!("cargo:rerun-if-changed=src/multifit/sinusoid_fitting.c");
     println!("cargo:rerun-if-changed=src/multifit/sinusoid_fitting.h");
     println!("cargo:rerun-if-changed=build.rs");

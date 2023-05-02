@@ -110,8 +110,8 @@ impl InterfComms {
     pub async fn publish_logs(
         &mut self,
         interf: &mut Interferometer,
-        ref_red_chisq: Option<f32>,
-        slave_red_chisq: Option<f32>,
+        ref_red_chisq: f32,
+        slave_red_chisq: f32,
     ) -> zeromq::ZmqResult<()> {
         let mut msg: zeromq::ZmqMessage = self.hostname.clone().into();
 
@@ -128,14 +128,14 @@ impl InterfComms {
         msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
         msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
 
-        let stats = interf.stats.evauluate();
+        let stats = interf.stats.evaluate();
 
         let mut stats_vec = Vec::with_capacity(20);
         stats_vec.extend(stats.avg_fitting_time_us.to_le_bytes());
         stats_vec.extend(stats.avg_iterations_ref.to_le_bytes());
         stats_vec.extend(stats.avg_iterations_slave.to_le_bytes());
-        stats_vec.extend(ref_red_chisq.unwrap_or(0.0).to_le_bytes());
-        stats_vec.extend(slave_red_chisq.unwrap_or(0.0).to_le_bytes());
+        stats_vec.extend(ref_red_chisq.to_le_bytes());
+        stats_vec.extend(slave_red_chisq.to_le_bytes());
 
         msg.push_back(stats_vec.into());
 
