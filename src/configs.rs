@@ -347,43 +347,41 @@ pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<SlaveLaser, String> 
 }
 
 pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
-    let hostname = gethostname()
-        .into_string()
-        .map_err(|_| "failed to get hostname")?;
-    let hostname = hostname.as_str();
-    let is_master = tomlget_or!(cfg, hostname, "is_master", as_bool, false);
+    // let hostname = gethostname()
+    //     .into_string()
+    //     .map_err(|_| "failed to get hostname")?;
+    // let hostname = hostname.as_str();
+    // let is_master = tomlget_or!(cfg, hostname, "is_master", as_bool, false);
     let mut out = Servo::default();
-    if is_master {
-        out.gain_P = tomlget_or!(cfg, "ref_laser", "gain_p", as_float, f32, 0.2);
-        out.gain_I = tomlget_or!(cfg, "ref_laser", "gain_i", as_float, f32, 0.1);
-        out.gain_D = tomlget_or!(cfg, "ref_laser", "gain_d", as_float, f32, 0.0);
-        out.set_alpha_I(tomlget_or!(
-            cfg,
-            "ref_laser",
-            "integral_decay_rate",
-            as_float,
-            f32,
-            0.85
-        ));
-        out.max_feedback_step_size = tomlget_or!(
-            cfg,
-            "ref_laser",
-            "feedback_max_step_size_v",
-            as_float,
-            f32,
-            1.0
-        );
-        let max_err_tolerance_MHz = tomlget_or!(
-            cfg,
-            "ref_laser",
-            "max_err_tolerance_MHz",
-            as_float,
-            f32,
-            f64::INFINITY
-        );
-        out.err_max_tolerance = max_err_tolerance_MHz * 2.0 * PI
-            / tomlget!(cfg, "general", "interferometer_FSR_MHz", as_float, f32);
-    }
+    out.gain_P = tomlget_or!(cfg, "ref_laser", "gain_p", as_float, f32, 0.2);
+    out.gain_I = tomlget_or!(cfg, "ref_laser", "gain_i", as_float, f32, 0.1);
+    out.gain_D = tomlget_or!(cfg, "ref_laser", "gain_d", as_float, f32, 0.0);
+    out.set_alpha_I(tomlget_or!(
+        cfg,
+        "ref_laser",
+        "integral_decay_rate",
+        as_float,
+        f32,
+        0.85
+    ));
+    out.max_feedback_step_size = tomlget_or!(
+        cfg,
+        "ref_laser",
+        "feedback_max_step_size_v",
+        as_float,
+        f32,
+        1.0
+    );
+    let max_err_tolerance_MHz = tomlget_or!(
+        cfg,
+        "ref_laser",
+        "max_err_tolerance_MHz",
+        as_float,
+        f32,
+        f64::INFINITY
+    );
+    out.err_max_tolerance = max_err_tolerance_MHz * 2.0 * PI
+        / tomlget!(cfg, "general", "interferometer_FSR_MHz", as_float, f32);
     Ok(out)
 }
 pub fn slave_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {

@@ -60,11 +60,11 @@ impl DaqSetup {
         let steps_up = (16384.0 * self.symmetry) as u16;
         let mut waveform = Vec::<f32>::with_capacity(16384);
         for i in 0..steps_up {
-            waveform.push(1.0 * (i as f32) / (steps_up as f32) - 0.5);
+            waveform.push(2.0 * (i as f32) / (steps_up as f32) - 1.0);
         }
         for i in steps_up..16384 {
             waveform.push(
-                0.5 * f32::cos(PI * (i as f32 - steps_up as f32) / (16384 - steps_up) as f32),
+                f32::cos(PI * (i as f32 - steps_up as f32) / (16384 - steps_up) as f32),
             );
         }
 

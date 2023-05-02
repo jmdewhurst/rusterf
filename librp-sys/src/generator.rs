@@ -307,15 +307,16 @@ impl<'a, Flavor: ChannelFlavor> Channel<'a, Flavor> {
     pub fn set_amplitude(&mut self, ampl_v: f32) -> APIResult<()> {
         self.ampl_v = ampl_v.clamp(
             0.0,
-            (self.raw_channel.max_output_v - self.raw_channel.min_output_v) / 2.0,
+            self.raw_channel.max_output_v - self.raw_channel.min_output_v,
         );
         self.offset_v = self.offset_v.clamp(
-            self.raw_channel.min_output_v + self.ampl_v.abs(),
-            self.raw_channel.max_output_v - self.ampl_v.abs(),
+            self.raw_channel.min_output_v + self.ampl_v / 2.0,
+            self.raw_channel.max_output_v - self.ampl_v / 2.0,
         );
         self.raw_channel.set_offset_v(self.offset_v)?;
+        self.raw_channel.set_amplitude_v(self.ampl_v / 2.0)?;
         self.raw_channel
-            .set_burst_last_value_v(self.offset_v + self.ampl_v * self.waveform_last_value)
+            .set_burst_last_value_v(self.offset_v + self.ampl_v * self.waveform_last_value / 2.0)
     }
     #[inline]
     pub fn set_offset(&mut self, offset_v: f32) -> APIResult<()> {
@@ -421,16 +422,16 @@ impl<'a, Flavor: ChannelFlavor> ChannelBuilder<'a, Flavor> {
         self.amplitude_v = self.amplitude_v.clamp(
             // (self.range_v.start - self.range_v.end)/2.0,
             0.0,
-            (self.range_v.end - self.range_v.start) / 2.0,
+            self.range_v.end - self.range_v.start,
         );
         self.offset_v = self.offset_v.clamp(
-            self.range_v.start + self.amplitude_v.abs(),
-            self.range_v.end - self.amplitude_v.abs(),
+            self.range_v.start + self.amplitude_v / 2.0,
+            self.range_v.end - self.amplitude_v / 2.0,
         );
 
         self.ch.set_freq(self.freq_hz)?;
         self.ch.set_offset_v(self.offset_v)?;
-        self.ch.set_amplitude_v(self.amplitude_v)?;
+        self.ch.set_amplitude_v(self.amplitude_v / 2.0)?;
 
         Ok(())
     }
@@ -523,7 +524,7 @@ impl<'a> ChannelBuilder<'a, Pulse> {
         self.ch.set_burst_count(1)?;
         self.ch.set_burst_repetitions(1)?;
         self.ch
-            .set_burst_last_value_v(self.amplitude_v * last_value + self.offset_v)?;
+            .set_burst_last_value_v(self.amplitude_v * last_value / 2.0 + self.offset_v)?;
         if self.enable {
             self.ch.enable()?;
         }

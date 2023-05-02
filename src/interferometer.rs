@@ -169,8 +169,7 @@ impl Interferometer {
             ["AMPL", "SET", x] => {
                 self.ramp_setup.amplitude(x.parse::<f32>().or(Err(()))?);
                 self.update_fringe_params();
-                let _ = ramp_ch.map(|x| x.set_amplitude(self.ramp_setup.amplitude_volts));
-                String::new()
+                format!("{:?}", ramp_ch.map(|x| x.set_amplitude(self.ramp_setup.amplitude_volts)))
             }
             ["AMPL", "GET"] => self.ramp_setup.amplitude_volts.to_string(),
             ["SCALE_FACTOR", "SET", x] => {

@@ -145,9 +145,7 @@ async fn main() {
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
-    if interf.is_master() {
-        interf.ref_lock.enable();
-    }
+    interf.ref_lock.enable();
     loop {
         interf.cycle_counter += 1;
 
@@ -231,7 +229,7 @@ async fn main() {
         if reset_timer
             || last_ref_result.low_contrast
             || last_ref_result.invalid_params
-            || last_ref_result.chisq > (1000 * last_slave_result.dof) as f32
+            || last_ref_result.chisq > (5000 * last_slave_result.dof) as f32
         {
             interf.ref_laser.fit_coefficients =
                 [0.0, interf.ref_laser.fringe_freq(), 0.0, 0.0, 1000.0];
@@ -239,7 +237,7 @@ async fn main() {
         if reset_timer
             || last_slave_result.low_contrast
             || last_slave_result.invalid_params
-            || last_slave_result.chisq > (1000 * last_slave_result.dof) as f32
+            || last_slave_result.chisq > (5000 * last_slave_result.dof) as f32
         {
             interf.slave_laser.fit_coefficients =
                 [0.0, interf.slave_laser.fringe_freq(), 0.0, 0.0, 1000.0];
@@ -281,7 +279,7 @@ async fn main() {
             multifit::wrapped_angle_difference(ref_result.params[2], interf.ref_lock.setpoint());
         let slave_error = multifit::wrapped_angle_difference(
             slave_result.params[2] - ref_error * wavelength_ratio,
-            interf.slave_lock.setpoint() - interf.ref_lock.setpoint() * wavelength_ratio,
+            interf.slave_lock.setpoint() + interf.ref_lock.setpoint() * wavelength_ratio,
         );
         interf
             .stats
@@ -299,7 +297,7 @@ async fn main() {
         // the zero-length point is in the interferometer, and adjust the slave laser accordingly
         interf
             .ref_lock
-            .set_setpoint(interf.ref_lock.setpoint() - ref_adjustment);
+            .set_setpoint(interf.ref_lock.setpoint() + ref_adjustment);
 
         let slave_adjustment = interf.slave_lock.do_pid(slave_error);
         let _ = slave_out_ch.adjust_offset(slave_adjustment);
