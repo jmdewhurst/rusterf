@@ -5,9 +5,10 @@ use std::num::NonZeroU32;
 use std::str::Split;
 
 use librp_sys::core::{APIResult, RPCoreChannel};
+use librp_sys::generator::{Channel, Pulse};
 use librp_sys::oscilloscope::Oscilloscope;
 
-use super::laser::Laser;
+use super::laser::{ReferenceLaser, SlaveLaser};
 use super::lock::Servo;
 use super::ramp::DaqSetup;
 use crate::multifit;
@@ -90,9 +91,9 @@ impl CumulativeStatistics {
 
 #[derive(Debug)]
 pub struct Interferometer {
-    pub ref_laser: Laser,
+    pub ref_laser: ReferenceLaser,
     pub ref_lock: Servo,
-    pub slave_laser: Laser,
+    pub slave_laser: SlaveLaser,
     pub slave_lock: Servo,
     pub fit_setup_ref: multifit::FitSetup,
     pub fit_setup_slave: multifit::FitSetup,
@@ -108,9 +109,9 @@ impl Interferometer {
     #[must_use]
     pub fn new() -> Option<Self> {
         Some(Interferometer {
-            ref_laser: Laser::new(12)?,
+            ref_laser: ReferenceLaser::new(12)?,
             ref_lock: Servo::default(),
-            slave_laser: Laser::new(12)?,
+            slave_laser: SlaveLaser::new(12)?,
             slave_lock: Servo::default(),
             fit_setup_ref: multifit::FitSetup::init(1, 16384, 16, 1e-6, 1e-6, 1e-6, 3.0)?,
             fit_setup_slave: multifit::FitSetup::init(1, 16384, 16, 1e-6, 1e-6, 1e-6, 3.0)?,
@@ -159,11 +160,16 @@ impl Interferometer {
         Ok(())
     }
 
-    fn process_ramp_command(&mut self, cmd: Split<'_, char>) -> Result<String, ()> {
+    fn process_ramp_command(
+        &mut self,
+        cmd: Split<'_, char>,
+        ramp_ch: Option<&mut Channel<'_, Pulse>>,
+    ) -> Result<String, ()> {
         let resp = match cmd.collect::<Vec<&str>>()[..] {
             ["AMPL", "SET", x] => {
                 self.ramp_setup.amplitude(x.parse::<f32>().or(Err(()))?);
                 self.update_fringe_params();
+                let _ = ramp_ch.map(|x| x.set_amplitude(self.ramp_setup.amplitude_volts));
                 String::new()
             }
             ["AMPL", "GET"] => self.ramp_setup.amplitude_volts.to_string(),
@@ -213,9 +219,13 @@ impl Interferometer {
     /// holding the response to the sender of the command.
     /// # Errors
     /// Returns `Err(())` in case of a failure to parse a valid command in `cmd`
-    pub fn process_command(&mut self, mut cmd: Split<'_, char>) -> Result<String, ()> {
+    pub fn process_command(
+        &mut self,
+        mut cmd: Split<'_, char>,
+        ramp_ch: Option<&mut Channel<'_, Pulse>>,
+    ) -> Result<String, ()> {
         match cmd.next() {
-            Some("RAMP") => self.process_ramp_command(cmd),
+            Some("RAMP") => self.process_ramp_command(cmd, ramp_ch),
             Some("LASER") => self.process_laser_command(cmd),
             Some("LOCK") => match cmd.next() {
                 Some("REF") => self.ref_lock.process_command(cmd),

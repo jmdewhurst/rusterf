@@ -18,7 +18,7 @@ use librp_sys::{core, dpin};
 
 use crate::multifit::FitSetup;
 
-use super::laser::Laser;
+use super::laser::{ReferenceLaser, SlaveLaser};
 use super::lock::Servo;
 use super::ramp::DaqSetup;
 use super::util::{tomlget, tomlget_or};
@@ -268,7 +268,7 @@ fn buff_size_exponent(cfg: &toml::Value) -> usize {
     }
 }
 
-pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
+pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<ReferenceLaser, String> {
     let hostname = gethostname()
         .into_string()
         .map_err(|_| "failed to get hostname")?;
@@ -277,7 +277,8 @@ pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
 
     let buffer_size_exponent = buff_size_exponent(cfg);
 
-    let mut out = Laser::new(buffer_size_exponent).ok_or("failed to instantiate laser struct")?;
+    let mut out =
+        ReferenceLaser::new(buffer_size_exponent).ok_or("failed to instantiate laser struct")?;
     out.set_wavelength(
         tomlget!(cfg, "ref_laser", "wavelength_nm", as_float, f32),
         tomlget_or!(cfg, "ramp", "piezo_scale_factor", as_float, f32, 2000.0),
@@ -308,7 +309,7 @@ pub fn ref_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     out.fit_coefficients = [0.0, out.fringe_freq(), 0.0, 0.0, 1000.0];
     Ok(out)
 }
-pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
+pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<SlaveLaser, String> {
     let hostname = gethostname()
         .into_string()
         .map_err(|_| "failed to get hostname")?;
@@ -316,7 +317,8 @@ pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<Laser, String> {
     let slave_laser_name = tomlget!(cfg, hostname, "slave_laser", as_str);
     let buffer_size_exponent = buff_size_exponent(cfg);
 
-    let mut out = Laser::new(buffer_size_exponent).ok_or("failed to instantiate laser struct")?;
+    let mut out =
+        SlaveLaser::new(buffer_size_exponent).ok_or("failed to instantiate laser struct")?;
     out.set_wavelength(
         tomlget!(cfg, slave_laser_name, "wavelength_nm", as_float, f32),
         tomlget_or!(cfg, "ramp", "piezo_scale_factor", as_float, f32, 2000.0),
@@ -352,8 +354,8 @@ pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
     let is_master = tomlget_or!(cfg, hostname, "is_master", as_bool, false);
     let mut out = Servo::default();
     if is_master {
-        out.gain_P = tomlget_or!(cfg, "ref_laser", "gain_p", as_float, f32, 0.001);
-        out.gain_I = tomlget_or!(cfg, "ref_laser", "gain_i", as_float, f32, 0.003);
+        out.gain_P = tomlget_or!(cfg, "ref_laser", "gain_p", as_float, f32, 0.2);
+        out.gain_I = tomlget_or!(cfg, "ref_laser", "gain_i", as_float, f32, 0.1);
         out.gain_D = tomlget_or!(cfg, "ref_laser", "gain_d", as_float, f32, 0.0);
         out.set_alpha_I(tomlget_or!(
             cfg,
@@ -369,7 +371,7 @@ pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
             "feedback_max_step_size_v",
             as_float,
             f32,
-            0.001
+            1.0
         );
         let max_err_tolerance_MHz = tomlget_or!(
             cfg,
@@ -377,7 +379,7 @@ pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
             "max_err_tolerance_MHz",
             as_float,
             f32,
-            10.0
+            f64::INFINITY
         );
         out.err_max_tolerance = max_err_tolerance_MHz * 2.0 * PI
             / tomlget!(cfg, "general", "interferometer_FSR_MHz", as_float, f32);

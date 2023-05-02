@@ -293,7 +293,6 @@ impl<'a, Flavor: ChannelFlavor> Channel<'a, Flavor> {
     pub fn disable(&mut self) -> APIResult<()> {
         self.raw_channel.enable()
     }
-
     #[inline]
     #[must_use]
     pub fn offset(&self) -> f32 {
@@ -305,6 +304,20 @@ impl<'a, Flavor: ChannelFlavor> Channel<'a, Flavor> {
         self.ampl_v
     }
     #[inline]
+    pub fn set_amplitude(&mut self, ampl_v: f32) -> APIResult<()> {
+        self.ampl_v = ampl_v.clamp(
+            0.0,
+            (self.raw_channel.max_output_v - self.raw_channel.min_output_v) / 2.0,
+        );
+        self.offset_v = self.offset_v.clamp(
+            self.raw_channel.min_output_v + self.ampl_v.abs(),
+            self.raw_channel.max_output_v - self.ampl_v.abs(),
+        );
+        self.raw_channel.set_offset_v(self.offset_v)?;
+        self.raw_channel
+            .set_burst_last_value_v(self.offset_v + self.ampl_v * self.waveform_last_value)
+    }
+    #[inline]
     pub fn set_offset(&mut self, offset_v: f32) -> APIResult<()> {
         self.offset_v = offset_v.clamp(
             self.raw_channel.min_output_v + self.ampl_v.abs(),
@@ -314,7 +327,6 @@ impl<'a, Flavor: ChannelFlavor> Channel<'a, Flavor> {
         self.raw_channel
             .set_burst_last_value_v(self.offset_v + self.ampl_v * self.waveform_last_value)
     }
-
     #[inline]
     pub fn adjust_offset(&mut self, adjustment_v: f32) -> APIResult<()> {
         self.set_offset(adjustment_v + self.offset_v)

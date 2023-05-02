@@ -5,6 +5,7 @@ use bytes::Bytes;
 use chrono::Local;
 use futures::future::FutureExt;
 use gethostname::gethostname;
+use librp_sys::generator::{Channel, Pulse};
 use zeromq::prelude::*;
 
 use super::interferometer::Interferometer;
@@ -87,6 +88,7 @@ impl InterfComms {
     pub async fn handle_socket_request<'a>(
         &mut self,
         interf: &mut Interferometer,
+        ramp_ch: Option<&mut Channel<'_, Pulse>>,
     ) -> Option<String> {
         let cmd_msg = catch_unwind(AssertUnwindSafe(|| self.command_sock.recv().now_or_never()))
             .map_err(|_| async {
@@ -96,7 +98,7 @@ impl InterfComms {
             .ok()??
             .ok()?;
         let cmd = str::from_utf8(cmd_msg.get(0)?).ok()?;
-        let _ = if let Ok(s) = interf.process_command(cmd.split(':')) {
+        let _ = if let Ok(s) = interf.process_command(cmd.split(':'), ramp_ch) {
             self.command_sock.send(s.into()).await
         } else {
             eprintln!("[{}] failed to process command [{}]", Local::now(), cmd);
@@ -119,7 +121,6 @@ impl InterfComms {
 
         msg.push_back(iterf32_to_bytes(&interf.ref_laser.phase_log));
         msg.push_back(iterf32_to_bytes(&interf.slave_laser.phase_log));
-        msg.push_back(iterf32_to_bytes(&interf.ref_laser.feedback_log));
         msg.push_back(iterf32_to_bytes(&interf.slave_laser.feedback_log));
 
         msg.push_back(vecu32_to_bytes(&interf.last_waveform_ref));

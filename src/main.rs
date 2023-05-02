@@ -122,6 +122,8 @@ async fn main() {
         .apply(&mut pit.scope, ramp_ch_raw, slave_out_ch_raw)
         .expect("failed to apply ramp settings");
 
+    let wavelength_ratio = interf.ref_laser.wavelength_nm() / interf.slave_laser.wavelength_nm();
+
     pit.scope
         .start_acquisition()
         .expect("Failed to start data acquisition");
@@ -246,7 +248,10 @@ async fn main() {
         loop {
             if triggered.elapsed().as_nanos() > interf.ramp_setup.rise_time_ns() {
                 break;
-            } else if let Some(request) = interf_comms.handle_socket_request(&mut interf).await {
+            } else if let Some(request) = interf_comms
+                .handle_socket_request(&mut interf, ramp_ch.as_mut())
+                .await
+            {
                 println!("[{}] Handled socket request <{}>", Local::now(), request);
             }
         }
@@ -275,10 +280,8 @@ async fn main() {
         let ref_error =
             multifit::wrapped_angle_difference(ref_result.params[2], interf.ref_lock.setpoint());
         let slave_error = multifit::wrapped_angle_difference(
-            slave_result.params[2]
-                - interf.ref_lock.last_error() * interf.ref_laser.wavelength_nm()
-                    / interf.slave_laser.wavelength_nm(),
-            interf.slave_lock.setpoint(),
+            slave_result.params[2] - ref_error * wavelength_ratio,
+            interf.slave_lock.setpoint() - interf.ref_lock.setpoint() * wavelength_ratio,
         );
         interf
             .stats
@@ -292,31 +295,26 @@ async fn main() {
         interf.slave_laser.fit_coefficients = slave_result.params;
 
         let ref_adjustment = interf.ref_lock.do_pid(ref_error);
-        let slave_adjustment = interf.slave_lock.do_pid(slave_error);
+        // we don't actually servo on the reference laser, just use the pid loop to decide where
+        // the zero-length point is in the interferometer, and adjust the slave laser accordingly
+        interf
+            .ref_lock
+            .set_setpoint(interf.ref_lock.setpoint() - ref_adjustment);
 
-        let _ = ramp_ch.as_mut().map(|x| x.adjust_offset(ref_adjustment));
+        let slave_adjustment = interf.slave_lock.do_pid(slave_error);
         let _ = slave_out_ch.adjust_offset(slave_adjustment);
 
         interf.ref_laser.phase_log.push(ref_error);
-        interf.ref_laser.feedback_log.push(
-            ramp_ch
-                .as_ref()
-                .map_or(0.0, librp_sys::generator::Channel::offset),
-        );
         interf.slave_laser.phase_log.push(slave_error);
         interf.slave_laser.feedback_log.push(slave_out_ch.offset());
 
         last_ref_result = ref_result;
         last_slave_result = slave_result;
 
-        if interf_comms.should_publish_logs(interf.cycle_counter + 2) {
+        if interf_comms.should_publish_logs(interf.cycle_counter + 1) {
             // Ideally we'd always send the most recent waveform, but we handle communications
             // while the scope is acquiring, i.e. while the most recent waveform is being written in
-            // memory. Instead, we have to copy the waveform ahead of time, but this large of a
-            // memory operation can take a few milliseconds, which slightly distorts the next
-            // waveform acquired. So we copy the waveform a few cycles ahead of our next
-            // communications event, so in effect when we publish a 'most recent waveform', it's
-            // actually a few cycles out of date.
+            // memory. Instead, we have to copy the waveform ahead of time.
             let _ = match interf.ref_laser.input_channel {
                 core::RPCoreChannel::CH_1 => pit.scope.write_raw_waveform(
                     &mut interf.last_waveform_ref,

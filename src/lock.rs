@@ -8,10 +8,11 @@ use itertools::{Itertools, MinMaxResult};
 
 use crate::ring_buffer::DyadicRingBuffer;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum EnableState {
-    Locked,
+    #[default]
     Unresolved,
+    Locked,
 }
 #[derive(Debug, Default, Clone, Copy)]
 pub enum DisableState {
