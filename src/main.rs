@@ -239,8 +239,11 @@ async fn main() {
             || last_slave_result.invalid_params
             || last_slave_result.chisq > (5000 * last_slave_result.dof) as f32
         {
-            interf.slave_laser.fit_coefficients =
-                [0.0, interf.slave_laser.fringe_freq(), 0.0, 0.0, 1000.0];
+            interf.slave_laser.fit_coefficients[0] = 0.0;
+            interf.slave_laser.fit_coefficients[1] = interf.slave_laser.fringe_freq();
+            interf.slave_laser.fit_coefficients[3] = interf.ref_laser.fit_coefficients[3] * interf.slave_laser.fringe_freq() / interf.ref_laser.fringe_freq();
+            // interf.slave_laser.fit_coefficients =
+            //     [0.0, interf.slave_laser.fringe_freq(), 0.0, interf.ref_laser.fit_coefficents[3] * interf.slave_laser.fringe_freq() / interf.ref_laser.fringe_freq(), 1000.0];
         }
 
         loop {
