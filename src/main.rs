@@ -250,7 +250,7 @@ async fn main() {
             if triggered.elapsed().as_nanos() > interf.ramp_setup.rise_time_ns() {
                 break;
             } else if let Some(request) = interf_comms
-                .handle_socket_request(&mut interf, ramp_ch.as_mut())
+                .handle_socket_request(&mut interf, ramp_ch.as_mut(), &mut slave_out_ch)
                 .await
             {
                 println!("[{}] Handled socket request <{}>", Local::now(), request);

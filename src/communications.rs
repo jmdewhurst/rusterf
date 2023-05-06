@@ -5,7 +5,7 @@ use bytes::Bytes;
 use chrono::Local;
 use futures::future::FutureExt;
 use gethostname::gethostname;
-use librp_sys::generator::{Channel, Pulse};
+use librp_sys::generator::{Channel, Pulse, DC};
 use zeromq::prelude::*;
 
 use super::interferometer::Interferometer;
@@ -89,6 +89,7 @@ impl InterfComms {
         &mut self,
         interf: &mut Interferometer,
         ramp_ch: Option<&mut Channel<'_, Pulse>>,
+        slave_ch: &mut Channel<'_, DC>,
     ) -> Option<String> {
         let cmd_msg = catch_unwind(AssertUnwindSafe(|| self.command_sock.recv().now_or_never()))
             .map_err(|_| async {
@@ -98,11 +99,11 @@ impl InterfComms {
             .ok()??
             .ok()?;
         let cmd = str::from_utf8(cmd_msg.get(0)?).ok()?;
-        let _ = if let Ok(s) = interf.process_command(cmd.split(':'), ramp_ch) {
+        let _ = if let Ok(s) = interf.process_command(cmd.split(':'), ramp_ch, slave_ch) {
             self.command_sock.send(s.into()).await
         } else {
             eprintln!("[{}] failed to process command [{}]", Local::now(), cmd);
-            self.command_sock.send("".into()).await
+            self.command_sock.send(format!("Command '{cmd}' not recognized").into()).await
         };
         Some(cmd.to_string())
     }

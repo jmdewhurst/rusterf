@@ -277,15 +277,15 @@ impl FitSetup {
             guess: guess_internal,
         };
         let raw_result = unsafe { do_fitting_5(self as *mut FitSetup, data_struct) };
-        if raw_result.gsl_status != 0 {
-            eprintln!("[{}] fitting error [{}]", Local::now(), unsafe {
-                CStr::from_ptr(gsl_strerror(raw_result.gsl_status))
-                    .to_str()
-                    .expect("the library function gsl_strerror should return a valid C-style string (with static lifetime)")
-            });
-            eprintln!("{} iterations", raw_result.niter);
-            eprintln!("{raw_result:?}");
-        }
+        // if raw_result.gsl_status != 0 {
+        //     eprintln!("[{}] fitting error [{}]", Local::now(), unsafe {
+        //         CStr::from_ptr(gsl_strerror(raw_result.gsl_status))
+        //             .to_str()
+        //             .expect("the library function gsl_strerror should return a valid C-style string (with static lifetime)")
+        //     });
+        //     eprintln!("{} iterations", raw_result.niter);
+        //     eprintln!("{raw_result:?}");
+        // }
 
         let mut params = [
             (raw_result.params[0] * raw_result.params[0]

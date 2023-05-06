@@ -5,7 +5,7 @@ use std::num::NonZeroU32;
 use std::str::Split;
 
 use librp_sys::core::{APIResult, RPCoreChannel};
-use librp_sys::generator::{Channel, Pulse};
+use librp_sys::generator::{Channel, Pulse, DC};
 use librp_sys::oscilloscope::Oscilloscope;
 
 use super::laser::{ReferenceLaser, SlaveLaser};
@@ -222,6 +222,7 @@ impl Interferometer {
         &mut self,
         mut cmd: Split<'_, char>,
         ramp_ch: Option<&mut Channel<'_, Pulse>>,
+        slave_ch: &mut Channel<'_, DC>,
     ) -> Result<String, ()> {
         match cmd.next() {
             Some("RAMP") => self.process_ramp_command(cmd, ramp_ch),
@@ -231,6 +232,14 @@ impl Interferometer {
                 Some("SLAVE") => self.slave_lock.process_command(cmd),
                 Some(_) | None => Err(()),
             },
+            Some("OUTPUT") => {match cmd.next() {
+                Some("SET") => {
+                    slave_ch.set_offset(cmd.next().and_then(|x| x.parse::<f32>().ok()).ok_or(())?).map_err(|x| ())?;
+                    self.slave_lock.reset_integral();
+                    Ok(String::new())
+                }
+                Some(_) | None => Err(()),
+            }}
             Some(_) | None => Err(()),
         }
     }
