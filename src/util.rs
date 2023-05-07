@@ -62,6 +62,26 @@ macro_rules! tomlget_or {
             })
     };
 }
+
+macro_rules! tomlget_opt {
+    ($cfg:ident, $sec:expr, $key:expr, $conv:ident, $as:ty) => {
+        $cfg.get($sec)
+            .and_then(|sec| sec.get($key))
+            .and_then(|val| val.$conv())
+            .map(|val| val as $as)
+    };
+    ($cfg:ident, $sec:expr, $key:expr, as_str) => {
+        $cfg.get($sec)
+            .and_then(|sec| sec.get($key))
+            .and_then(|val| val.as_str())
+    };
+    ($cfg:ident, $sec:expr, $key:expr, as_bool, $or:expr) => {
+        $cfg.get($sec)
+            .and_then(|sec| sec.get($key))
+            .and_then(|val| val.as_bool())
+    };
+}
+
 macro_rules! tomlget {
     ($cfg:ident, $sec:expr, $key:expr, $conv:ident, $as:ty) => {
         $cfg.get($sec)
@@ -111,7 +131,7 @@ pub fn find_file(file_name: &Path) -> Option<PathBuf> {
     None
 }
 
-pub(crate) use {tomlget, tomlget_or};
+pub(crate) use {tomlget, tomlget_opt, tomlget_or};
 //
 //
 //

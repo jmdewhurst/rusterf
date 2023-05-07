@@ -17,6 +17,7 @@ use librp_sys::oscilloscope::Oscilloscope;
 use librp_sys::{core, dpin};
 
 use crate::multifit::FitSetup;
+use crate::util::tomlget_opt;
 
 use super::laser::{ReferenceLaser, SlaveLaser};
 use super::lock::Servo;
@@ -435,52 +436,28 @@ pub fn multifit_from_config(cfg: &toml::Value) -> Result<FitSetup, String> {
         + tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40)
         - 1)
         / tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40);
-    let mut out = FitSetup::init(
-        tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40),
-        num_points,
-        tomlget_or!(cfg, "multifit", "max_iterations", as_integer, u32, 32),
-        tomlget_or!(cfg, "multifit", "xtol", as_float, f32, 1.0e-8),
-        tomlget_or!(cfg, "multifit", "gtol", as_float, f32, 1.0e-8),
-        tomlget_or!(cfg, "multifit", "ftol", as_float, f32, 1.0e-8),
-        tomlget_or!(cfg, "multifit", "max_av_ratio", as_float, f32, 1.5),
-    )
-    .ok_or_else(|| "Failed to instantiate FitSetup struct".to_string())?;
-    out.low_contrast_threshold = tomlget_or!(
-        cfg,
-        "multifit",
-        "low_contrast_threshold",
-        as_float,
-        f32,
-        100.0
-    );
-    Ok(out)
-}
-pub fn multifit_from_config_5(cfg: &toml::Value) -> Result<FitSetup, String> {
-    let num_points = (16384
-        - tomlget_or!(cfg, "multifit", "samples_skip_start", as_integer, u32, 6000)
-        - tomlget_or!(cfg, "multifit", "samples_skip_end", as_integer, u32, 0)
-        + tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40)
-        - 1)
-        / tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40);
-    let mut out = FitSetup::init_five_parameter(
-        tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40),
-        num_points,
-        tomlget_or!(cfg, "multifit", "max_iterations", as_integer, u32, 32),
-        tomlget_or!(cfg, "multifit", "xtol", as_float, f32, 1.0e-8),
-        tomlget_or!(cfg, "multifit", "gtol", as_float, f32, 1.0e-8),
-        tomlget_or!(cfg, "multifit", "ftol", as_float, f32, 1.0e-8),
-        tomlget_or!(cfg, "multifit", "max_av_ratio", as_float, f32, 1.5),
-    )
-    .ok_or_else(|| "Failed to instantiate FitSetup struct".to_string())?;
-    out.low_contrast_threshold = tomlget_or!(
-        cfg,
-        "multifit",
-        "low_contrast_threshold",
-        as_float,
-        f32,
-        100.0
-    );
-    Ok(out)
+    let stride = tomlget_or!(cfg, "multifit", "skip_rate", as_integer, u32, 40);
+    let iters = tomlget_opt!(cfg, "multifit", "max_iterations", as_integer, u32);
+    Ok(FitSetup::new(num_points)
+        .stride(stride)
+        .opt_max_iterations(iters)
+        .opt_xtol(tomlget_opt!(cfg, "multifit", "xtol", as_float, f32))
+        .opt_gtol(tomlget_opt!(cfg, "multifit", "gtol", as_float, f32))
+        .opt_ftol(tomlget_opt!(cfg, "multifit", "ftol", as_float, f32))
+        .opt_max_av_ratio(tomlget_opt!(cfg, "multifit", "max_av_ratio", as_float, f32))
+        .opt_low_contrast_threshold((|| {
+            tomlget_opt!(
+                cfg,
+                gethostname()
+                    .to_str()
+                    .and_then(|h| tomlget_opt!(cfg, h, "slave_laser", as_str))?,
+                "low_contrast_threshold",
+                as_float,
+                f32
+            )
+        })())
+        .init()
+        .ok_or("failed to instantate multifit setup")?)
 }
 
 pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, String> {
@@ -491,7 +468,7 @@ pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, S
     out.slave_laser = slave_laser_from_config(cfg)?;
     out.ref_lock = ref_lock_from_config(cfg)?;
     out.slave_lock = slave_lock_from_config(cfg)?;
-    out.fit_setup_ref = multifit_from_config_5(cfg)?;
-    out.fit_setup_slave = multifit_from_config_5(cfg)?;
+    out.fit_setup_ref = multifit_from_config(cfg)?;
+    out.fit_setup_slave = multifit_from_config(cfg)?;
     Ok(out)
 }

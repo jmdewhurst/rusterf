@@ -140,8 +140,8 @@ async fn main() {
         .build()
         .unwrap();
 
-    let mut last_ref_result: multifit::FitResultFive = Default::default();
-    let mut last_slave_result: multifit::FitResultFive = Default::default();
+    let mut last_ref_result: multifit::FitResult = Default::default();
+    let mut last_slave_result: multifit::FitResult = Default::default();
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
@@ -241,7 +241,9 @@ async fn main() {
         {
             interf.slave_laser.fit_coefficients[0] = 0.0;
             interf.slave_laser.fit_coefficients[1] = interf.slave_laser.fringe_freq();
-            interf.slave_laser.fit_coefficients[3] = interf.ref_laser.fit_coefficients[3] * interf.slave_laser.fringe_freq() / interf.ref_laser.fringe_freq();
+            interf.slave_laser.fit_coefficients[3] = interf.ref_laser.fit_coefficients[3]
+                * interf.slave_laser.fringe_freq()
+                / interf.ref_laser.fringe_freq();
             // interf.slave_laser.fit_coefficients =
             //     [0.0, interf.slave_laser.fringe_freq(), 0.0, interf.ref_laser.fit_coefficents[3] * interf.slave_laser.fringe_freq() / interf.ref_laser.fringe_freq(), 1000.0];
         }

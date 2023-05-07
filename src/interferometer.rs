@@ -113,8 +113,8 @@ impl Interferometer {
             ref_lock: Servo::default(),
             slave_laser: SlaveLaser::new(12)?,
             slave_lock: Servo::default(),
-            fit_setup_ref: multifit::FitSetup::init(1, 16384, 16, 1e-6, 1e-6, 1e-6, 3.0)?,
-            fit_setup_slave: multifit::FitSetup::init(1, 16384, 16, 1e-6, 1e-6, 1e-6, 3.0)?,
+            fit_setup_ref: multifit::FitSetup::new(10).init()?,
+            fit_setup_slave: multifit::FitSetup::new(10).init()?,
             stats: Default::default(),
 
             ramp_setup: DaqSetup::new(),
@@ -169,7 +169,10 @@ impl Interferometer {
             ["AMPL", "SET", x] => {
                 self.ramp_setup.amplitude(x.parse::<f32>().or(Err(()))?);
                 self.update_fringe_params();
-                format!("{:?}", ramp_ch.map(|x| x.set_amplitude(self.ramp_setup.amplitude_volts)))
+                format!(
+                    "{:?}",
+                    ramp_ch.map(|x| x.set_amplitude(self.ramp_setup.amplitude_volts))
+                )
             }
             ["AMPL", "GET"] => self.ramp_setup.amplitude_volts.to_string(),
             ["SCALE_FACTOR", "SET", x] => {
@@ -232,14 +235,16 @@ impl Interferometer {
                 Some("SLAVE") => self.slave_lock.process_command(cmd),
                 Some(_) | None => Err(()),
             },
-            Some("OUTPUT") => {match cmd.next() {
+            Some("OUTPUT") => match cmd.next() {
                 Some("SET") => {
-                    slave_ch.set_offset(cmd.next().and_then(|x| x.parse::<f32>().ok()).ok_or(())?).map_err(|x| ())?;
+                    slave_ch
+                        .set_offset(cmd.next().and_then(|x| x.parse::<f32>().ok()).ok_or(())?)
+                        .map_err(|_| ())?;
                     self.slave_lock.reset_integral();
                     Ok(String::new())
                 }
                 Some(_) | None => Err(()),
-            }}
+            },
             Some(_) | None => Err(()),
         }
     }
