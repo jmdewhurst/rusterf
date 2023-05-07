@@ -23,6 +23,7 @@ use librp_sys::Pitaya;
 use librp_sys::{core, oscilloscope};
 
 use rusterf::configs;
+use rusterf::interferometer::State;
 use rusterf::multifit;
 use rusterf::util::find_file;
 
@@ -118,7 +119,7 @@ async fn main() {
     };
     let (mut ramp_ch, mut slave_out_ch) = interf
         .ramp_setup
-        .slave_default_offset_v(interf.slave_lock.default_output_voltage)
+        .slave_default_offset_v(interf.slave_servo.default_output_voltage)
         .apply(&mut pit.scope, ramp_ch_raw, slave_out_ch_raw)
         .expect("failed to apply ramp settings");
 
@@ -131,6 +132,25 @@ async fn main() {
         .scope
         .set_trigger_source(oscilloscope::TrigSrc::ExtRising);
     thread::sleep(time::Duration::from_millis(50));
+
+    find_file(Path::new("swap.toml")).map(|file| {
+        println!("found swap file `{file:?}` -- attempting to recover");
+        let contents = read_to_string(&file).ok()?;
+
+        match toml::from_str::<State>(&contents)
+            .map(|state| interf.apply_state(state, &mut slave_out_ch))
+        {
+            Ok(Ok(())) => Some(()),
+            Ok(Err(err)) => {
+                println!("swap file failed with error {err:?} -- attempting to delete");
+                std::fs::remove_file(&file).ok()
+            }
+            Err(err) => {
+                println!("swap file failed with error {err:?} -- attempting to delete");
+                std::fs::remove_file(&file).ok()
+            }
+        }
+    });
 
     let mut triggered: Instant;
     let mut fit_started: Instant;
@@ -145,7 +165,7 @@ async fn main() {
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
-    interf.ref_lock.enable();
+    interf.ref_position_lock.enable();
     loop {
         interf.cycle_counter += 1;
 
@@ -222,6 +242,12 @@ async fn main() {
             interf.stats.reset();
         }
 
+        if interf.do_swap_file && interf.cycle_counter % 256 == 0 {
+            if let Ok(Ok(s)) = interf.state().map(|x| toml::to_string(&x)) {
+                let _ = std::fs::write("swap.toml", &s);
+            }
+        }
+
         // if the last fit got a suspicious result, we should reset our ''guess'' parameters
         // to try to avoid getting stuck fitting to a bad mode. Also just reset the guess
         // occasionally just in case.
@@ -280,11 +306,13 @@ async fn main() {
             },
         );
 
-        let ref_error =
-            multifit::wrapped_angle_difference(ref_result.params[2], interf.ref_lock.setpoint());
+        let ref_error = multifit::wrapped_angle_difference(
+            ref_result.params[2],
+            interf.ref_position_lock.setpoint(),
+        );
         let slave_error = multifit::wrapped_angle_difference(
             slave_result.params[2] - ref_error * wavelength_ratio,
-            interf.slave_lock.setpoint() + interf.ref_lock.setpoint() * wavelength_ratio,
+            interf.slave_servo.setpoint() + interf.ref_position_lock.setpoint() * wavelength_ratio,
         );
         interf
             .stats
@@ -297,14 +325,14 @@ async fn main() {
         interf.ref_laser.fit_coefficients = ref_result.params;
         interf.slave_laser.fit_coefficients = slave_result.params;
 
-        let ref_adjustment = interf.ref_lock.do_pid(ref_error);
+        let ref_adjustment = interf.ref_position_lock.do_pid(ref_error);
         // we don't actually servo on the reference laser, just use the pid loop to decide where
         // the zero-length point is in the interferometer, and adjust the slave laser accordingly
         interf
-            .ref_lock
-            .set_setpoint(interf.ref_lock.setpoint() + ref_adjustment);
+            .ref_position_lock
+            .set_setpoint(interf.ref_position_lock.setpoint() + ref_adjustment);
 
-        let slave_adjustment = interf.slave_lock.do_pid(slave_error);
+        let slave_adjustment = interf.slave_servo.do_pid(slave_error);
         let _ = slave_out_ch.adjust_offset(slave_adjustment);
 
         interf.ref_laser.phase_log.push(ref_error);

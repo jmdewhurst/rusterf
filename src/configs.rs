@@ -462,13 +462,20 @@ pub fn multifit_from_config(cfg: &toml::Value) -> Result<FitSetup, String> {
 
 pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, String> {
     let mut out = Interferometer::new().ok_or("failed to instantiate interferometer struct")?;
+    let hostname = gethostname()
+        .into_string()
+        .map_err(|_| "failed to get hostname")?;
+    let hostname = hostname.as_str();
+    let slave_laser_name = tomlget!(cfg, hostname, "slave_laser", as_str);
 
     out.ramp_setup = ramp_from_config(cfg)?;
     out.ref_laser = ref_laser_from_config(cfg)?;
     out.slave_laser = slave_laser_from_config(cfg)?;
-    out.ref_lock = ref_lock_from_config(cfg)?;
-    out.slave_lock = slave_lock_from_config(cfg)?;
+    out.ref_position_lock = ref_lock_from_config(cfg)?;
+    out.slave_servo = slave_lock_from_config(cfg)?;
     out.fit_setup_ref = multifit_from_config(cfg)?;
     out.fit_setup_slave = multifit_from_config(cfg)?;
+
+    out.do_swap_file = tomlget_or!(cfg, slave_laser_name, "do_swap_file", as_bool, false);
     Ok(out)
 }

@@ -3,8 +3,12 @@
 
 use std::num::NonZeroU32;
 use std::str::Split;
+use std::thread;
+use std::time::{Duration, SystemTimeError, UNIX_EPOCH};
 
-use librp_sys::core::{APIResult, RPCoreChannel};
+use serde::{Deserialize, Serialize};
+
+use librp_sys::core::{APIError, APIResult, RPCoreChannel};
 use librp_sys::generator::{Channel, Pulse, DC};
 use librp_sys::oscilloscope::Oscilloscope;
 
@@ -12,6 +16,23 @@ use super::laser::{ReferenceLaser, SlaveLaser};
 use super::lock::Servo;
 use super::ramp::DaqSetup;
 use crate::multifit;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct State {
+    pub ref_setpoint: f32,
+    pub slave_setpoint: f32,
+    pub slave_output_v: f32,
+    pub slave_locked: bool,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone)]
+pub enum ApplyStateError {
+    RPError(APIError),
+    ClockError(SystemTimeError),
+    OutdatedState,
+    InvalidState,
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Statistics {
@@ -92,9 +113,9 @@ impl CumulativeStatistics {
 #[derive(Debug)]
 pub struct Interferometer {
     pub ref_laser: ReferenceLaser,
-    pub ref_lock: Servo,
+    pub ref_position_lock: Servo,
     pub slave_laser: SlaveLaser,
-    pub slave_lock: Servo,
+    pub slave_servo: Servo,
     pub fit_setup_ref: multifit::FitSetup,
     pub fit_setup_slave: multifit::FitSetup,
     pub stats: CumulativeStatistics,
@@ -103,6 +124,8 @@ pub struct Interferometer {
     pub cycle_counter: u64,
     pub last_waveform_ref: Vec<u32>,
     pub last_waveform_slave: Vec<u32>,
+
+    pub do_swap_file: bool,
 }
 
 impl Interferometer {
@@ -110,9 +133,9 @@ impl Interferometer {
     pub fn new() -> Option<Self> {
         Some(Interferometer {
             ref_laser: ReferenceLaser::new(12)?,
-            ref_lock: Servo::default(),
+            ref_position_lock: Servo::default(),
             slave_laser: SlaveLaser::new(12)?,
-            slave_lock: Servo::default(),
+            slave_servo: Servo::default(),
             fit_setup_ref: multifit::FitSetup::new(10).init()?,
             fit_setup_slave: multifit::FitSetup::new(10).init()?,
             stats: Default::default(),
@@ -121,6 +144,7 @@ impl Interferometer {
             cycle_counter: 0,
             last_waveform_ref: Vec::with_capacity(16384),
             last_waveform_slave: Vec::with_capacity(16384),
+            do_swap_file: false,
         })
     }
     #[inline]
@@ -141,8 +165,8 @@ impl Interferometer {
             self.ramp_setup.amplitude_volts,
         );
 
-        self.ref_lock.reset_integral();
-        self.slave_lock.reset_integral();
+        self.ref_position_lock.reset_integral();
+        self.slave_servo.reset_integral();
     }
 
     /// Copy the data from the Red Pitaya's internal oscilloscope buffer into the buffers of `self`.
@@ -231,8 +255,8 @@ impl Interferometer {
             Some("RAMP") => self.process_ramp_command(cmd, ramp_ch),
             Some("LASER") => self.process_laser_command(cmd),
             Some("LOCK") => match cmd.next() {
-                Some("REF") => self.ref_lock.process_command(cmd),
-                Some("SLAVE") => self.slave_lock.process_command(cmd),
+                Some("REF") => self.ref_position_lock.process_command(cmd),
+                Some("SLAVE") => self.slave_servo.process_command(cmd),
                 Some(_) | None => Err(()),
             },
             Some("OUTPUT") => match cmd.next() {
@@ -240,12 +264,57 @@ impl Interferometer {
                     slave_ch
                         .set_offset(cmd.next().and_then(|x| x.parse::<f32>().ok()).ok_or(())?)
                         .map_err(|_| ())?;
-                    self.slave_lock.reset_integral();
+                    self.slave_servo.reset_integral();
                     Ok(String::new())
                 }
                 Some(_) | None => Err(()),
             },
             Some(_) | None => Err(()),
         }
+    }
+
+    pub fn state(&self) -> Result<State, SystemTimeError> {
+        Ok(State {
+            ref_setpoint: self.ref_position_lock.setpoint(),
+            slave_setpoint: self.slave_servo.setpoint(),
+            slave_output_v: self.slave_laser.feedback_log.last(),
+            slave_locked: match self.slave_servo.mode() {
+                crate::lock::Mode::Enabled(_) => true,
+                crate::lock::Mode::Disabled(_) => false,
+            },
+            timestamp: UNIX_EPOCH.elapsed()?.as_secs(),
+        })
+    }
+
+    pub fn apply_state(
+        &mut self,
+        state: State,
+        slave_ch: &mut Channel<'_, DC>,
+    ) -> Result<(), ApplyStateError> {
+        // refuse to accept states that are more than four days old
+        if UNIX_EPOCH
+            .elapsed()
+            .map_err(|x| ApplyStateError::ClockError(x))?
+            .as_secs()
+            > state.timestamp + 3600 * 24 * 4
+        {
+            return Err(ApplyStateError::OutdatedState);
+        }
+        let (min, max) = slave_ch.output_range_v();
+        if state.slave_output_v < min || state.slave_output_v > max {
+            return Err(ApplyStateError::InvalidState);
+        }
+        while slave_ch.offset() != state.slave_output_v {
+            slave_ch
+                .adjust_offset((state.slave_output_v - slave_ch.offset()).clamp(-0.1, 0.1))
+                .map_err(|x| ApplyStateError::RPError(x))?;
+            thread::sleep(Duration::from_millis(100));
+        }
+        self.ref_position_lock.set_setpoint(state.ref_setpoint);
+        self.slave_servo.set_setpoint(state.slave_setpoint);
+        if state.slave_locked {
+            self.slave_servo.enable();
+        }
+        Ok(())
     }
 }

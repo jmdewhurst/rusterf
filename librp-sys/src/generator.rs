@@ -295,6 +295,11 @@ impl<'a, Flavor: ChannelFlavor> Channel<'a, Flavor> {
     }
     #[inline]
     #[must_use]
+    pub fn output_range_v(&self) -> (f32, f32) {
+        (self.raw_channel.min_output_v, self.raw_channel.max_output_v)
+    }
+    #[inline]
+    #[must_use]
     pub fn offset(&self) -> f32 {
         self.offset_v
     }

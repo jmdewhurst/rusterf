@@ -17,6 +17,7 @@ zeromq = {git = "https://github.com/zeromq/zmq.rs", default-features=false, feat
 futures = "0.3.26"
 bytes = "1.4.0"
 itertools = "0.10.5"
+serde = {version = "1.0.162", features = ["derive"]}
 
 [target.'cfg(target_arch = "arm")'.dependencies]
 librp-sys = {path = "librp-sys"}
