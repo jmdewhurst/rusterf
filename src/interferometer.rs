@@ -4,7 +4,7 @@
 use std::num::NonZeroU32;
 use std::str::Split;
 use std::thread;
-use std::time::{Duration, SystemTimeError, UNIX_EPOCH};
+use std::time::{Duration, SystemTimeError, UNIX_EPOCH, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -126,6 +126,7 @@ pub struct Interferometer {
     pub last_waveform_slave: Vec<u32>,
 
     pub do_swap_file: bool,
+    pub start_time: Instant,
 }
 
 impl Interferometer {
@@ -145,6 +146,7 @@ impl Interferometer {
             last_waveform_ref: Vec::with_capacity(16384),
             last_waveform_slave: Vec::with_capacity(16384),
             do_swap_file: false,
+            start_time: Instant::now(),
         })
     }
     #[inline]

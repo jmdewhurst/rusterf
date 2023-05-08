@@ -119,6 +119,7 @@ impl InterfComms {
         let mut msg: zeromq::ZmqMessage = self.hostname.clone().into();
 
         msg.push_back(interf.cycle_counter.to_le_bytes().to_vec().into());
+        msg.push_back(interf.start_time.elapsed().as_secs().to_le_bytes().to_vec().into());
 
         msg.push_back(iterf32_to_bytes(&interf.ref_laser.phase_log));
         msg.push_back(iterf32_to_bytes(&interf.slave_laser.phase_log));
