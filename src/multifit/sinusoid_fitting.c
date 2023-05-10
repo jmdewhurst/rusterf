@@ -135,4 +135,5 @@ void release_multifit_resources(multifit_setup_t *setup) {
   gsl_multifit_nlinear_free(setup->work);
   gsl_vector_free(setup->guess);
   free(setup->fdf);
+  free(setup->setup_params);
 }
