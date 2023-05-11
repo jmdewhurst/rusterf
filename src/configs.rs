@@ -347,19 +347,19 @@ pub fn slave_laser_from_config(cfg: &toml::Value) -> Result<SlaveLaser, String> 
     Ok(out)
 }
 
-pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
+pub fn position_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
     // let hostname = gethostname()
     //     .into_string()
     //     .map_err(|_| "failed to get hostname")?;
     // let hostname = hostname.as_str();
     // let is_master = tomlget_or!(cfg, hostname, "is_master", as_bool, false);
     let mut out = Servo::default();
-    out.gain_P = tomlget_or!(cfg, "ref_laser", "gain_p", as_float, f32, 0.2);
-    out.gain_I = tomlget_or!(cfg, "ref_laser", "gain_i", as_float, f32, 0.1);
-    out.gain_D = tomlget_or!(cfg, "ref_laser", "gain_d", as_float, f32, 0.0);
+    out.gain_P = tomlget_or!(cfg, "position_lock", "gain_p", as_float, f32, 0.2);
+    out.gain_I = tomlget_or!(cfg, "position_lock", "gain_i", as_float, f32, 0.1);
+    out.gain_D = tomlget_or!(cfg, "position_lock", "gain_d", as_float, f32, 0.0);
     out.set_alpha_I(tomlget_or!(
         cfg,
-        "ref_laser",
+        "position_lock",
         "integral_decay_rate",
         as_float,
         f32,
@@ -367,7 +367,7 @@ pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
     ));
     out.max_feedback_step_size = tomlget_or!(
         cfg,
-        "ref_laser",
+        "position_lock",
         "feedback_max_step_size_v",
         as_float,
         f32,
@@ -375,7 +375,7 @@ pub fn ref_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
     );
     let max_err_tolerance_MHz = tomlget_or!(
         cfg,
-        "ref_laser",
+        "position_lock",
         "max_err_tolerance_MHz",
         as_float,
         f32,
@@ -471,7 +471,8 @@ pub fn interferometer_from_config(cfg: &toml::Value) -> Result<Interferometer, S
     out.ramp_setup = ramp_from_config(cfg)?;
     out.ref_laser = ref_laser_from_config(cfg)?;
     out.slave_laser = slave_laser_from_config(cfg)?;
-    out.ref_position_lock = ref_lock_from_config(cfg)?;
+    out.ref_position_lock = position_lock_from_config(cfg)?;
+    out.slave_position_lock = position_lock_from_config(cfg)?;
     out.slave_servo = slave_lock_from_config(cfg)?;
     out.fit_setup_ref = multifit_from_config(cfg)?;
     out.fit_setup_slave = multifit_from_config(cfg)?;

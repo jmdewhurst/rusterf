@@ -310,14 +310,17 @@ async fn main() {
             ref_result.params[2],
             interf.ref_position_lock.setpoint(),
         );
-        let slave_error = multifit::wrapped_angle_difference(
+        let slave_novel_error = multifit::wrapped_angle_difference(
             slave_result.params[2] - ref_error * wavelength_ratio,
-            interf.slave_servo.setpoint() + interf.ref_position_lock.setpoint() * wavelength_ratio,
+            interf.slave_position_lock.setpoint()
+                + interf.ref_position_lock.setpoint() * wavelength_ratio,
         );
+        let slave_absolute_error = slave_novel_error + interf.slave_position_lock.setpoint()
+            - interf.slave_servo.setpoint();
         interf
             .stats
             .new_time_us(fit_started.elapsed().as_micros() as u32)
-            .new_errs(ref_error, slave_error)
+            .new_errs(ref_error, slave_absolute_error)
             .new_iterations(
                 ref_result.n_iterations as u32,
                 slave_result.n_iterations as u32,
@@ -325,18 +328,24 @@ async fn main() {
         interf.ref_laser.fit_coefficients = ref_result.params;
         interf.slave_laser.fit_coefficients = slave_result.params;
 
-        let ref_adjustment = interf.ref_position_lock.do_pid(ref_error);
         // we don't actually servo on the reference laser, just use the pid loop to decide where
         // the zero-length point is in the interferometer, and adjust the slave laser accordingly
+        let ref_adjustment = interf.ref_position_lock.do_pid(ref_error);
         interf
             .ref_position_lock
             .set_setpoint(interf.ref_position_lock.setpoint() + ref_adjustment);
+        // play the same game with the slave position lock to 'unroll' its movements over more than
+        // a 2PI-radian interval
+        let slave_position_adjustment = interf.slave_position_lock.do_pid(slave_novel_error);
+        interf
+            .slave_position_lock
+            .set_setpoint(interf.slave_position_lock.setpoint() + slave_position_adjustment);
 
-        let slave_adjustment = interf.slave_servo.do_pid(slave_error);
+        let slave_adjustment = interf.slave_servo.do_pid(slave_absolute_error);
         let _ = slave_out_ch.adjust_offset(slave_adjustment);
 
         interf.ref_laser.phase_log.push(ref_error);
-        interf.slave_laser.phase_log.push(slave_error);
+        interf.slave_laser.phase_log.push(slave_absolute_error);
         interf.slave_laser.feedback_log.push(slave_out_ch.offset());
 
         last_ref_result = ref_result;

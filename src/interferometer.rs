@@ -19,7 +19,8 @@ use crate::multifit;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct State {
-    pub ref_setpoint: f32,
+    pub ref_position_setpoint: f32,
+    pub slave_position_setpoint: f32,
     pub slave_setpoint: f32,
     pub slave_output_v: f32,
     pub slave_locked: bool,
@@ -115,6 +116,7 @@ pub struct Interferometer {
     pub ref_laser: ReferenceLaser,
     pub ref_position_lock: Servo,
     pub slave_laser: SlaveLaser,
+    pub slave_position_lock: Servo,
     pub slave_servo: Servo,
     pub fit_setup_ref: multifit::FitSetup,
     pub fit_setup_slave: multifit::FitSetup,
@@ -133,9 +135,10 @@ impl Interferometer {
     #[must_use]
     pub fn new() -> Option<Self> {
         Some(Interferometer {
-            ref_laser: ReferenceLaser::new(12)?,
+            ref_laser: ReferenceLaser::new(8)?,
             ref_position_lock: Servo::default(),
-            slave_laser: SlaveLaser::new(12)?,
+            slave_laser: SlaveLaser::new(8)?,
+            slave_position_lock: Servo::default(),
             slave_servo: Servo::default(),
             fit_setup_ref: multifit::FitSetup::new(10).init()?,
             fit_setup_slave: multifit::FitSetup::new(10).init()?,
@@ -277,7 +280,8 @@ impl Interferometer {
 
     pub fn state(&self) -> Result<State, SystemTimeError> {
         Ok(State {
-            ref_setpoint: self.ref_position_lock.setpoint(),
+            ref_position_setpoint: self.ref_position_lock.setpoint(),
+            slave_position_setpoint: self.slave_position_lock.setpoint(),
             slave_setpoint: self.slave_servo.setpoint(),
             slave_output_v: self.slave_laser.feedback_log.last(),
             slave_locked: match self.slave_servo.mode() {
@@ -312,7 +316,8 @@ impl Interferometer {
                 .map_err(|x| ApplyStateError::RPError(x))?;
             thread::sleep(Duration::from_millis(100));
         }
-        self.ref_position_lock.set_setpoint(state.ref_setpoint);
+        self.ref_position_lock
+            .set_setpoint(state.ref_position_setpoint);
         self.slave_servo.set_setpoint(state.slave_setpoint);
         if state.slave_locked {
             self.slave_servo.enable();
