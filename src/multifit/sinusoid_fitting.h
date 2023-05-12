@@ -33,6 +33,7 @@ typedef struct {
   int gsl_status;
   int niter;
   float params[5];
+  float param_errs[5];
   float chisq;
 } multifit_result_raw_t;
 
@@ -41,6 +42,7 @@ typedef struct {
   gsl_multifit_nlinear_fdf *fdf;
   gsl_multifit_nlinear_parameters *setup_params;
   gsl_vector *guess;
+  gsl_matrix *covariance;
   uint32_t skip_rate;
   uint32_t num_points;
   uint32_t max_iterations;

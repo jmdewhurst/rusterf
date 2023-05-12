@@ -165,7 +165,6 @@ async fn main() {
 
     println!("fitting with n = {:?}", interf.fit_setup_ref.num_points);
     println!("Entering main loop...");
-    interf.ref_position_lock.enable();
     loop {
         interf.cycle_counter += 1;
 
@@ -217,6 +216,7 @@ async fn main() {
             println!("\tchisq/dof: ref {},", last_ref_result.reduced_chisq());
             println!("slave fit {:?}", last_slave_result.params);
             println!("slave chisq/dof {}", last_slave_result.reduced_chisq());
+            println!("ref posn {:?} slave posn {:?}, slave_last_err {:?}, slave total error {:?}", interf.ref_position_lock.setpoint(),  interf.slave_position_lock.setpoint(), interf.slave_position_lock.last_error(), interf.slave_servo.last_error());
         }
 
         if interf_comms.should_publish_logs(interf.cycle_counter) {
@@ -327,19 +327,27 @@ async fn main() {
             );
         interf.ref_laser.fit_coefficients = ref_result.params;
         interf.slave_laser.fit_coefficients = slave_result.params;
+        interf.ref_laser.fit_coefficient_errs = ref_result.param_errs;
+        interf.slave_laser.fit_coefficient_errs = slave_result.param_errs;
 
         // we don't actually servo on the reference laser, just use the pid loop to decide where
         // the zero-length point is in the interferometer, and adjust the slave laser accordingly
-        let ref_adjustment = interf.ref_position_lock.do_pid(ref_error);
-        interf
-            .ref_position_lock
-            .set_setpoint(interf.ref_position_lock.setpoint() + ref_adjustment);
+        // Only do this if the statistical error in phase is low, to try to prevent spuriously tracking
+        // movements when fringe amplitude is too low to get useful information out of
+        if interf.ref_laser.fit_coefficient_errs[2] < 1.0e-4 {
+            let ref_adjustment = interf.ref_position_lock.do_pid(ref_error);
+            interf
+                .ref_position_lock
+                .set_setpoint(interf.ref_position_lock.setpoint() + ref_adjustment);
+        }
         // play the same game with the slave position lock to 'unroll' its movements over more than
         // a 2PI-radian interval
-        let slave_position_adjustment = interf.slave_position_lock.do_pid(slave_novel_error);
-        interf
-            .slave_position_lock
-            .set_setpoint(interf.slave_position_lock.setpoint() + slave_position_adjustment);
+        if interf.slave_laser.fit_coefficient_errs[2] < 1.0e-4 {
+            let slave_position_adjustment = interf.slave_position_lock.do_pid(slave_novel_error);
+            interf
+                .slave_position_lock
+                .set_setpoint(interf.slave_position_lock.setpoint() + slave_position_adjustment);
+        }
 
         let slave_adjustment = interf.slave_servo.do_pid(slave_absolute_error);
         let _ = slave_out_ch.adjust_offset(slave_adjustment);

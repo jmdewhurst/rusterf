@@ -365,13 +365,13 @@ pub fn position_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
         f32,
         0.85
     ));
-    out.max_feedback_step_size = tomlget_or!(
+    let max_feedback_step_size_MHz = tomlget_or!(
         cfg,
         "position_lock",
-        "feedback_max_step_size_v",
+        "feedback_max_step_size_MHz",
         as_float,
         f32,
-        1.0
+        25.0
     );
     let max_err_tolerance_MHz = tomlget_or!(
         cfg,
@@ -383,6 +383,8 @@ pub fn position_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {
     );
     out.err_max_tolerance = max_err_tolerance_MHz * 2.0 * PI
         / tomlget!(cfg, "general", "interferometer_FSR_MHz", as_float, f32);
+    out.max_feedback_step_size = max_feedback_step_size_MHz * 2.0 * PI / tomlget!(cfg, "general", "interferometer_FSR_MHz", as_float, f32);
+    out.enable();
     Ok(out)
 }
 pub fn slave_lock_from_config(cfg: &toml::Value) -> Result<Servo, String> {

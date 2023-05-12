@@ -89,8 +89,17 @@ multifit_result_raw_t do_fitting(multifit_setup_t *setup,
                                            setup->gtol, setup->ftol, NULL, NULL,
                                            &info, setup->work);
   gsl_vector *coef = gsl_multifit_nlinear_position(setup->work);
+
+  // calculate covariance matrix and statistical errors in fit parameters. see
+  // https://www.gnu.org/software/gsl/doc/html/nls.html#c.gsl_multifit_nlinear_covar
+  // notice that these 'raw errors' should be multiplied by chisq/dof and then taken square root
+  // to get the 'actual statistical error' in the parameters
+  gsl_matrix *J = gsl_multifit_nlinear_jac(setup->work);
+  gsl_multifit_nlinear_covar(J, 0.0, setup->covariance);
+
   for (int i = 0; i < 5; i++) {
     result.params[i] = gsl_vector_get(coef, i);
+    result.param_errs[i] = gsl_matrix_get(setup->covariance, i, i);
   }
   result.gsl_status = status;
   result.niter = gsl_multifit_nlinear_niter(setup->work);
@@ -102,12 +111,14 @@ multifit_result_raw_t do_fitting(multifit_setup_t *setup,
   gsl_blas_ddot(f, f, &chisq);
   result.chisq = (float)chisq;
 
+
   return result;
 }
 
 uint32_t init_multifit_setup(multifit_setup_t *setup) {
   setup->fdf = malloc(sizeof(gsl_multifit_nlinear_fdf));
   setup->guess = gsl_vector_alloc(5);
+  setup->covariance = gsl_matrix_alloc(5, 5);
 
   setup->setup_params = malloc(sizeof(gsl_multifit_nlinear_parameters));
   *(setup->setup_params) = gsl_multifit_nlinear_default_parameters();
@@ -134,6 +145,7 @@ uint32_t init_multifit_setup(multifit_setup_t *setup) {
 void release_multifit_resources(multifit_setup_t *setup) {
   gsl_multifit_nlinear_free(setup->work);
   gsl_vector_free(setup->guess);
+  gsl_matrix_free(setup->covariance);
   free(setup->fdf);
   free(setup->setup_params);
 }

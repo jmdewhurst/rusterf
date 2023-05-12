@@ -131,6 +131,9 @@ impl InterfComms {
         msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
         msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
 
+        msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficient_errs));
+        msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficient_errs));
+
         let stats = interf.stats.evaluate();
 
         let mut stats_vec = Vec::with_capacity(20);

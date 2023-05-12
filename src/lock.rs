@@ -1,7 +1,7 @@
 #![warn(clippy::pedantic)]
 #![allow(non_snake_case)]
 
-use std::fmt;
+use std::fmt::{self, Debug};
 use std::str::Split;
 
 use itertools::{Itertools, MinMaxResult};
@@ -125,7 +125,7 @@ impl Servo {
                 self.mode = match self.mode {
                     Mode::Enabled(_) => Mode::Enabled(EnableState::Locked),
                     Mode::Disabled(_) => Mode::Disabled(DisableState::Resolved),
-                }
+                };
             }
             MinMaxResult::MinMax(_, _) => {
                 self.mode = match self.mode {

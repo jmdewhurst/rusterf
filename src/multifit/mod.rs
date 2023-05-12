@@ -41,6 +41,7 @@ struct FitResultRaw {
     gsl_status: c_int,
     niter: c_int,
     params: [f32; 5],
+    param_errs_raw: [f32; 5],
     chisq: f32,
 }
 
@@ -49,6 +50,7 @@ pub struct FitResult {
     pub gsl_status: i32,
     pub n_iterations: i32,
     pub params: [f32; 5],
+    pub param_errs: [f32; 5],
     pub low_contrast: bool,
     pub chisq: f32,
     pub dof: u32,
@@ -68,6 +70,7 @@ enum Workspace {}
 enum MultifitFDF {}
 enum GslMultifitParameters {}
 enum GslVector {}
+enum GslMatrix {}
 
 #[derive(Debug)]
 #[repr(C)]
@@ -76,6 +79,7 @@ pub struct FitSetup {
     fdf: *mut MultifitFDF,
     setup_params: *mut GslMultifitParameters,
     guess: *mut GslVector,
+    covariance: *mut GslMatrix,
     pub skip_rate: u32,
     pub num_points: u32,
     pub max_iterations: u32,
@@ -163,6 +167,7 @@ impl Builder {
             fdf: null_mut(),
             setup_params: null_mut(),
             guess: null_mut(),
+            covariance: null_mut(),
             skip_rate: self.skip_rate.map(NonZeroU32::get).unwrap_or(1),
             num_points: self.num_points,
             max_iterations: self.max_iterations.unwrap_or(16),
@@ -229,6 +234,8 @@ impl FitSetup {
             raw_result.params[4],
         ];
 
+        let param_errs = raw_result.param_errs_raw.map(|x| (x*raw_result.chisq / (self.num_points - 5) as f32).sqrt());
+
         if params[1] < 0.0 {
             params[1] *= -1.0;
             params[2] *= -1.0;
@@ -247,6 +254,7 @@ impl FitSetup {
             gsl_status: raw_result.gsl_status,
             n_iterations: raw_result.niter,
             params,
+            param_errs,
             low_contrast,
             chisq: raw_result.chisq,
             dof: self.num_points - 5,

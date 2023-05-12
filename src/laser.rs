@@ -13,6 +13,7 @@ pub struct SlaveLaser {
     pub input_channel: core::RPCoreChannel,
     pub output_channel: Option<core::RPCoreChannel>,
     pub fit_coefficients: [f32; 5],
+    pub fit_coefficient_errs: [f32; 5],
     fringe_freq: f32,
     pub phase_log: DyadicRingBuffer<f32>,
     pub feedback_log: DyadicRingBuffer<f32>,
@@ -27,6 +28,7 @@ impl SlaveLaser {
             output_channel: None,
             fringe_freq: 1.0,
             fit_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0],
+            fit_coefficient_errs: [0.0, 0.0, 0.0, 0.0, 0.0],
             phase_log: DyadicRingBuffer::new(n)?,
             feedback_log: DyadicRingBuffer::new(n)?,
         })
@@ -83,6 +85,7 @@ pub struct ReferenceLaser {
     pub input_channel: core::RPCoreChannel,
     pub output_channel: Option<core::RPCoreChannel>,
     pub fit_coefficients: [f32; 5],
+    pub fit_coefficient_errs: [f32; 5],
     fringe_freq: f32,
     pub phase_log: DyadicRingBuffer<f32>,
 }
@@ -96,6 +99,7 @@ impl ReferenceLaser {
             output_channel: None,
             fringe_freq: 1.0,
             fit_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0],
+            fit_coefficient_errs: [0.0, 0.0, 0.0, 0.0, 0.0],
             phase_log: DyadicRingBuffer::new(n)?,
         })
     }
