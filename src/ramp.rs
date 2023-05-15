@@ -67,26 +67,24 @@ impl DaqSetup {
                 f32::cos(PI * (i as f32 - steps_up as f32) / (16384 - steps_up) as f32),
             );
         }
+        let default_slave_output = (slave_ch.max_output_v() - slave_ch.min_output_v())/2.0;
 
         osc.set_decimation(self.decimation)?;
-        let ref_out = if let Some(ref_ch) = ref_ch {
-            Some(
-                ChannelBuilder::new(ref_ch)
-                    .with_previous_values()
-                    .amplitude_v(self.amplitude_volts)
-                    .period_s(self.ramp_period_s)
-                    .waveform(waveform)
-                    .enabled()
-                    .apply()?,
+        let ref_out = ref_ch.map(|ch| {
+            ChannelBuilder::new(ch)
+            .with_previous_values()
+            .amplitude_v(self.amplitude_volts)
+            .period_s(self.ramp_period_s)
+            .waveform(waveform)
+            .enabled()
+            .apply()
+        }).transpose()?;
+        let slave_out = ChannelBuilder::<DC>::new(slave_ch)
+            .with_previous_values()
+            .offset_v(
+                self.slave_default_offset_v
+                    .unwrap_or(default_slave_output)
             )
-        } else {
-            None
-        };
-        let mut build = ChannelBuilder::<DC>::new(slave_ch).with_previous_values();
-        if let Some(x) = self.slave_default_offset_v {
-            build = build.offset_v(x);
-        }
-        let slave_out = build
             .period_s(self.ramp_period_s / 100.0)
             .enabled()
             .apply()?;
