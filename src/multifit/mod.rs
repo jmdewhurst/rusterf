@@ -234,7 +234,9 @@ impl FitSetup {
             raw_result.params[4],
         ];
 
-        let param_errs = raw_result.param_errs_raw.map(|x| (x*raw_result.chisq / (self.num_points - 5) as f32).sqrt());
+        let param_errs = raw_result
+            .param_errs_raw
+            .map(|x| (x * raw_result.chisq / (self.num_points - 5) as f32).sqrt());
 
         if params[1] < 0.0 {
             params[1] *= -1.0;

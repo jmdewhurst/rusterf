@@ -4,7 +4,7 @@
 use std::num::NonZeroU32;
 use std::str::Split;
 use std::thread;
-use std::time::{Duration, SystemTimeError, UNIX_EPOCH, Instant};
+use std::time::{Duration, Instant, SystemTimeError, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 

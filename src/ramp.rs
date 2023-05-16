@@ -7,7 +7,7 @@
 #![allow(clippy::module_name_repetitions)]
 use std::f32::consts::PI;
 
-use librp_sys::core::{ADC_SAMPLE_RATE};
+use librp_sys::core::ADC_SAMPLE_RATE;
 use librp_sys::generator::{
     Channel, ChannelBuilder, ChannelInitializationError, Pulse, RawChannel, DC,
 };
@@ -63,28 +63,27 @@ impl DaqSetup {
             waveform.push(2.0 * (i as f32) / (steps_up as f32) - 1.0);
         }
         for i in steps_up..16384 {
-            waveform.push(
-                f32::cos(PI * (i as f32 - steps_up as f32) / (16384 - steps_up) as f32),
-            );
+            waveform.push(f32::cos(
+                PI * (i as f32 - steps_up as f32) / (16384 - steps_up) as f32,
+            ));
         }
-        let default_slave_output = (slave_ch.max_output_v() - slave_ch.min_output_v())/2.0;
+        let default_slave_output = (slave_ch.max_output_v() - slave_ch.min_output_v()) / 2.0;
 
         osc.set_decimation(self.decimation)?;
-        let ref_out = ref_ch.map(|ch| {
-            ChannelBuilder::new(ch)
-            .with_previous_values()
-            .amplitude_v(self.amplitude_volts)
-            .period_s(self.ramp_period_s)
-            .waveform(waveform)
-            .enabled()
-            .apply()
-        }).transpose()?;
+        let ref_out = ref_ch
+            .map(|ch| {
+                ChannelBuilder::new(ch)
+                    .with_previous_values()
+                    .amplitude_v(self.amplitude_volts)
+                    .period_s(self.ramp_period_s)
+                    .waveform(waveform)
+                    .enabled()
+                    .apply()
+            })
+            .transpose()?;
         let slave_out = ChannelBuilder::<DC>::new(slave_ch)
             .with_previous_values()
-            .offset_v(
-                self.slave_default_offset_v
-                    .unwrap_or(default_slave_output)
-            )
+            .offset_v(self.slave_default_offset_v.unwrap_or(default_slave_output))
             .period_s(self.ramp_period_s / 100.0)
             .enabled()
             .apply()?;

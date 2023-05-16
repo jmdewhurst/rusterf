@@ -216,7 +216,13 @@ async fn main() {
             println!("\tchisq/dof: ref {},", last_ref_result.reduced_chisq());
             println!("slave fit {:?}", last_slave_result.params);
             println!("slave chisq/dof {}", last_slave_result.reduced_chisq());
-            println!("ref posn {:?} slave posn {:?}, slave_last_err {:?}, slave total error {:?}", interf.ref_position_lock.setpoint(),  interf.slave_position_lock.setpoint(), interf.slave_position_lock.last_error(), interf.slave_servo.last_error());
+            println!(
+                "ref posn {:?} slave posn {:?}, slave_last_err {:?}, slave total error {:?}",
+                interf.ref_position_lock.setpoint(),
+                interf.slave_position_lock.setpoint(),
+                interf.slave_position_lock.last_error(),
+                interf.slave_servo.last_error()
+            );
         }
 
         if interf_comms.should_publish_logs(interf.cycle_counter) {

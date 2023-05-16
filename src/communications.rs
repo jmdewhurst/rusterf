@@ -103,7 +103,9 @@ impl InterfComms {
             self.command_sock.send(s.into()).await
         } else {
             eprintln!("[{}] failed to process command [{}]", Local::now(), cmd);
-            self.command_sock.send(format!("Command '{cmd}' not recognized").into()).await
+            self.command_sock
+                .send(format!("Command '{cmd}' not recognized").into())
+                .await
         };
         Some(cmd.to_string())
     }
@@ -119,7 +121,15 @@ impl InterfComms {
         let mut msg: zeromq::ZmqMessage = self.hostname.clone().into();
 
         msg.push_back(interf.cycle_counter.to_le_bytes().to_vec().into());
-        msg.push_back(interf.start_time.elapsed().as_secs().to_le_bytes().to_vec().into());
+        msg.push_back(
+            interf
+                .start_time
+                .elapsed()
+                .as_secs()
+                .to_le_bytes()
+                .to_vec()
+                .into(),
+        );
 
         msg.push_back(iterf32_to_bytes(&interf.ref_laser.phase_log));
         msg.push_back(iterf32_to_bytes(&interf.slave_laser.phase_log));
