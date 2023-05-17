@@ -10,25 +10,14 @@ use zeromq::prelude::*;
 
 use super::interferometer::Interferometer;
 
+use std::collections::VecDeque;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::str;
 
-fn iterf32_to_bytes<C>(collection: C) -> Bytes
-where
-    C: IntoIterator<Item = f32>,
-{
-    collection
-        .into_iter()
-        .flat_map(f32::to_le_bytes)
-        .collect::<Vec<u8>>()
-        .into()
-}
-fn vecu32_to_bytes(collection: &[u32]) -> Bytes {
-    collection
-        .iter()
-        .flat_map(|x| x.to_le_bytes())
-        .collect::<Vec<u8>>()
-        .into()
+macro_rules! to_bytes {
+    ($collection:expr) => {
+        $collection.iter().flat_map(|x| x.to_le_bytes())
+    };
 }
 
 pub struct InterfComms {
@@ -38,6 +27,7 @@ pub struct InterfComms {
     command_sock: zeromq::RepSocket,
     command_port: u16,
     logs_publish_frequency_exponent: u8,
+    outgoing_bytes: Vec<Bytes>,
 }
 
 impl InterfComms {
@@ -47,6 +37,9 @@ impl InterfComms {
         let command_sock = zeromq::RepSocket::new();
         // let msg_outgoing = zmq::Message::new();
         let hostname = gethostname().into_string().ok()?;
+        let mut outgoing_bytes: Vec<Bytes> = Vec::new();
+        outgoing_bytes.push(Bytes::copy_from_slice(hostname.as_bytes()));
+
         Some(InterfComms {
             hostname,
             logs_sock,
@@ -54,6 +47,7 @@ impl InterfComms {
             command_sock,
             command_port: 8081,
             logs_publish_frequency_exponent: 8,
+            outgoing_bytes,
         })
     }
 
@@ -118,44 +112,51 @@ impl InterfComms {
         ref_red_chisq: f32,
         slave_red_chisq: f32,
     ) -> zeromq::ZmqResult<()> {
-        let mut msg: zeromq::ZmqMessage = self.hostname.clone().into();
-
-        msg.push_back(interf.cycle_counter.to_le_bytes().to_vec().into());
-        msg.push_back(
-            interf
-                .start_time
-                .elapsed()
-                .as_secs()
-                .to_le_bytes()
-                .to_vec()
-                .into(),
-        );
-
-        msg.push_back(iterf32_to_bytes(&interf.ref_laser.phase_log));
-        msg.push_back(iterf32_to_bytes(&interf.slave_laser.phase_log));
-        msg.push_back(iterf32_to_bytes(&interf.slave_laser.feedback_log));
-
-        msg.push_back(vecu32_to_bytes(&interf.last_waveform_ref));
-        msg.push_back(vecu32_to_bytes(&interf.last_waveform_slave));
-
-        msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
-        msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
-
-        msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficient_errs));
-        msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficient_errs));
-
+        while self.outgoing_bytes.len() < 13 {
+            self.outgoing_bytes.push(Bytes::new());
+        }
         let stats = interf.stats.evaluate();
+        // nasty macro to try to limit reallocations
+        for (index, frame) in self.outgoing_bytes.iter_mut().enumerate() {
+            macro_rules! match_arm {
+                ($($new_bytes:expr),*) => {{
+                    let previous_buffer = ::std::mem::replace(frame, Bytes::new());
+                    let mut as_vec: Vec<u8> = previous_buffer.into();
+                    as_vec.clear();
+                    $(as_vec.extend($new_bytes);)*
+										*frame = Bytes::from(as_vec);
+                }};
+            }
+            match index {
+                0 => match_arm!(self.hostname.as_bytes()),
+                1 => match_arm!(interf.cycle_counter.to_le_bytes()),
+                2 => match_arm!(interf.start_time.elapsed().as_secs().to_le_bytes()),
+                3 => match_arm!(to_bytes!(interf.ref_laser.phase_log)),
+                4 => match_arm!(to_bytes!(interf.slave_laser.phase_log)),
+                5 => match_arm!(to_bytes!(interf.slave_laser.feedback_log)),
 
-        let mut stats_vec = Vec::with_capacity(20);
-        stats_vec.extend(stats.avg_fitting_time_us.to_le_bytes());
-        stats_vec.extend(stats.avg_iterations_ref.to_le_bytes());
-        stats_vec.extend(stats.avg_iterations_slave.to_le_bytes());
-        stats_vec.extend(ref_red_chisq.to_le_bytes());
-        stats_vec.extend(slave_red_chisq.to_le_bytes());
+                6 => match_arm!(to_bytes!(interf.last_waveform_ref)),
+                7 => match_arm!(to_bytes!(interf.last_waveform_slave)),
 
-        msg.push_back(stats_vec.into());
+                8 => match_arm!(to_bytes!(interf.ref_laser.fit_coefficients)),
+                9 => match_arm!(to_bytes!(interf.slave_laser.fit_coefficients)),
+                10 => match_arm!(to_bytes!(interf.ref_laser.fit_coefficient_errs)),
+                11 => match_arm!(to_bytes!(interf.slave_laser.fit_coefficient_errs)),
+                12 => {
+                    match_arm!(
+                        stats.avg_fitting_time_us.to_le_bytes(),
+                        stats.avg_iterations_ref.to_le_bytes(),
+                        stats.avg_iterations_slave.to_le_bytes(),
+                        ref_red_chisq.to_le_bytes(),
+                        slave_red_chisq.to_le_bytes()
+                    )
+                }
+                _ => {}
+            }
+        }
 
-        self.logs_sock.send(msg).await
+        let msg: VecDeque<Bytes> = self.outgoing_bytes.iter().cloned().collect();
+        self.logs_sock.send(msg.try_into().unwrap()).await
     }
 
     /// # Errors
