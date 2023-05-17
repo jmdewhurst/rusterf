@@ -314,10 +314,11 @@ impl Interferometer {
             slave_ch
                 .adjust_offset((state.slave_output_v - slave_ch.offset()).clamp(-0.1, 0.1))
                 .map_err(|x| ApplyStateError::RPError(x))?;
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(250));
         }
         self.ref_position_lock
             .set_setpoint(state.ref_position_setpoint);
+        self.slave_position_lock.set_setpoint(state.slave_position_setpoint);
         self.slave_servo.set_setpoint(state.slave_setpoint);
         if state.slave_locked {
             self.slave_servo.enable();
