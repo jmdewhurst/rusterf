@@ -226,6 +226,7 @@ async fn main() {
         }
 
         if interf_comms.should_publish_logs(interf.cycle_counter) {
+            fit_started = Instant::now();
             match catch_unwind(AssertUnwindSafe(|| {
                 block_on(interf_comms.publish_logs(
                     &mut interf,
@@ -246,6 +247,7 @@ async fn main() {
                 }
             }
             interf.stats.reset();
+            println!("publishing took {} usec", fit_started.elapsed().as_micros());
         }
 
         if interf.do_swap_file && interf.cycle_counter % 256 == 0 {
