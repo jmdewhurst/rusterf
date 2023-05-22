@@ -124,8 +124,8 @@ pub struct Interferometer {
 
     pub ramp_setup: DaqSetup,
     pub cycle_counter: u64,
-    pub last_waveform_ref: Vec<u32>,
-    pub last_waveform_slave: Vec<u32>,
+    pub last_waveform_ref: Vec<i16>,
+    pub last_waveform_slave: Vec<i16>,
 
     pub do_swap_file: bool,
     pub start_time: Instant,
@@ -318,7 +318,8 @@ impl Interferometer {
         }
         self.ref_position_lock
             .set_setpoint(state.ref_position_setpoint);
-        self.slave_position_lock.set_setpoint(state.slave_position_setpoint);
+        self.slave_position_lock
+            .set_setpoint(state.slave_position_setpoint);
         self.slave_servo.set_setpoint(state.slave_setpoint);
         if state.slave_locked {
             self.slave_servo.enable();

@@ -65,9 +65,22 @@ pub struct Oscilloscope {
     pub chA_buff_float: Vec<f32>,
     pub chB_buff_float: Vec<f32>,
     // arrays of a FULL waveform, as the raw u32, for caching a waveform to send over a socket
-    pub chA_last_waveform: Vec<u32>,
-    pub chB_last_waveform: Vec<u32>,
+    pub chA_last_waveform: Vec<i16>,
+    pub chB_last_waveform: Vec<i16>,
     region: ScopeRegion,
+}
+
+macro_rules! raw_i16 {
+    ($buff:expr, $i:ident, $trig_index:ident) => {{
+        let raw: u32 =
+            unsafe {
+                read_volatile($buff.offset(
+                    ($trig_index.wrapping_add($i as isize + 1)) as isize & BUFF_MASK as isize,
+                ))
+            };
+        // raw is a 14-bit signed integer. want to convert this to an i16
+        ((raw ^ (1 << 13)) - (1 << 13)) as i16
+    }};
 }
 
 /// # Errors
@@ -172,7 +185,7 @@ impl Oscilloscope {
     /// Returns a pair of vectors containing the most recent scope data (as u32) culled to
     /// `self`'s configured ROI. NOTE: allocates a pair of vectors
     #[allow(clippy::unnecessary_cast)]
-    pub fn get_scope_data_both(&mut self) -> APIResult<(Vec<u32>, Vec<u32>)> {
+    pub fn get_scope_data_both(&mut self) -> APIResult<(Vec<i16>, Vec<i16>)> {
         // returns owned vectors of the data in the region of interest described by self.region.
         // The API has functions for this, but only for copying the whole acq buffer, which is
         // slow, presumably because of memory bandwidth limitations. If we only use part of the
@@ -181,24 +194,14 @@ impl Oscilloscope {
         // direct access to the FPGA registers, but I believe it should be noticeably faster to
         // do a single read from the FPGA registers of the data we need, and then we can cache
         // those vectors while we do math on them.
-        let index = self.get_write_index_at_trigger()? as isize;
+        let trig_index = self.get_write_index_at_trigger()? as isize;
         let mut ret_a = Vec::with_capacity(self.region.num_points);
         let mut ret_b = Vec::with_capacity(self.region.num_points);
         for i in (self.region.skip_start..(BUFF_SIZE - self.region.skip_end))
             .step_by(self.region.skip_rate)
         {
-            ret_a.push(unsafe {
-                read_volatile(
-                    self.chA_buff_raw
-                        .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
-                )
-            });
-            ret_b.push(unsafe {
-                read_volatile(
-                    self.chB_buff_raw
-                        .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
-                )
-            });
+            ret_a.push(raw_i16!(self.chA_buff_raw, i, trig_index));
+            ret_b.push(raw_i16!(self.chB_buff_raw, i, trig_index));
         }
         Ok((ret_a, ret_b))
     }
@@ -208,7 +211,7 @@ impl Oscilloscope {
     #[allow(clippy::cast_precision_loss)]
     #[allow(clippy::unnecessary_cast)]
     pub fn update_scope_data_both(&mut self) -> APIResult<()> {
-        let index = self.get_write_index_at_trigger()? as isize;
+        let trig_index = self.get_write_index_at_trigger()? as isize;
 
         self.chA_buff_float.clear();
         self.chB_buff_float.clear();
@@ -217,21 +220,13 @@ impl Oscilloscope {
 
         let region_iter = (self.region.skip_start..(BUFF_SIZE - self.region.skip_end))
             .step_by(self.region.skip_rate);
-        self.chA_buff_float.extend(region_iter.map(|i| unsafe {
-            read_volatile(
-                self.chA_buff_raw
-                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
-            ) as f32
-        }));
+        self.chA_buff_float
+            .extend(region_iter.map(|i| raw_i16!(self.chA_buff_raw, i, trig_index) as f32));
 
         let region_iter = (self.region.skip_start..(BUFF_SIZE - self.region.skip_end))
             .step_by(self.region.skip_rate as usize);
-        self.chB_buff_float.extend(region_iter.map(|i| unsafe {
-            read_volatile(
-                self.chB_buff_raw
-                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
-            ) as f32
-        }));
+        self.chB_buff_float
+            .extend(region_iter.map(|i| raw_i16!(self.chB_buff_raw, i, trig_index) as f32));
 
         Ok(())
     }
@@ -241,25 +236,15 @@ impl Oscilloscope {
     /// This version does not cull data down to the region of interest, and is intended to be
     /// used to send the full scope trace to an external monitoring program.
     #[allow(clippy::unnecessary_cast)]
-    pub fn write_raw_waveform(&mut self, chA: &mut Vec<u32>, chB: &mut Vec<u32>) -> APIResult<()> {
-        let index = self.get_write_index_at_trigger()? as isize;
+    pub fn write_raw_waveform(&mut self, chA: &mut Vec<i16>, chB: &mut Vec<i16>) -> APIResult<()> {
+        let trig_index = self.get_write_index_at_trigger()? as isize;
         chA.clear();
         chB.clear();
         chA.reserve_exact(BUFF_SIZE);
         chB.reserve_exact(BUFF_SIZE);
 
-        chA.extend((0..BUFF_SIZE).map(|i| unsafe {
-            read_volatile(
-                self.chA_buff_raw
-                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
-            )
-        }));
-        chB.extend((0..BUFF_SIZE).map(|i| unsafe {
-            read_volatile(
-                self.chB_buff_raw
-                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
-            )
-        }));
+        chA.extend((0..BUFF_SIZE).map(|i| raw_i16!(self.chA_buff_raw, i, trig_index)));
+        chB.extend((0..BUFF_SIZE).map(|i| raw_i16!(self.chB_buff_raw, i, trig_index)));
 
         Ok(())
     }
@@ -269,21 +254,20 @@ impl Oscilloscope {
     /// # Panics
     /// Panics if the RP API returns a catastrophically wrong value
     #[allow(clippy::unnecessary_cast)]
-    pub fn get_scope_data_channel(&mut self, ch: RPCoreChannel) -> APIResult<Vec<u32>> {
-        let index = self.get_write_index_at_trigger()? as isize;
+    pub fn get_scope_data_channel(&mut self, ch: RPCoreChannel) -> APIResult<Vec<i16>> {
+        let trig_index = self.get_write_index_at_trigger()? as isize;
         let mut ret = Vec::with_capacity(self.region.num_points);
         for i in (self.region.skip_start..(BUFF_SIZE - self.region.skip_end))
             .step_by(self.region.skip_rate as usize)
         {
-            ret.push(unsafe {
-                read_volatile(
-                    match ch {
-                        RPCoreChannel::CH_1 => self.chA_buff_raw,
-                        RPCoreChannel::CH_2 => self.chB_buff_raw,
-                    }
-                    .offset((index.wrapping_add(i as isize + 1)) as isize & BUFF_MASK as isize),
-                )
-            });
+            ret.push(raw_i16!(
+                match ch {
+                    RPCoreChannel::CH_1 => self.chA_buff_raw,
+                    RPCoreChannel::CH_2 => self.chB_buff_raw,
+                },
+                i,
+                trig_index
+            ));
         }
         Ok(ret)
     }

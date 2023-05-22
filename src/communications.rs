@@ -23,7 +23,7 @@ where
         .collect::<Vec<u8>>()
         .into()
 }
-fn vecu32_to_bytes(collection: &[u32]) -> Bytes {
+fn vecu32_to_bytes(collection: &[i16]) -> Bytes {
     collection
         .iter()
         .flat_map(|x| x.to_le_bytes())
