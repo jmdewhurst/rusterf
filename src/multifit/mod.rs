@@ -25,6 +25,10 @@ pub fn wrapped_angle_difference(a: f32, b: f32) -> f32 {
 pub fn sinusoid(x: f32, p: [f32; 4]) -> f32 {
     p[0] * (p[1] * x - p[2]).cos() + p[3]
 }
+#[must_use]
+pub fn sinusoid_five(x: f32, p: [f32; 5]) -> f32 {
+    p[0] * (p[1] * x + p[3] * x.powi(2) - p[2]).cos() + p[4]
+}
 
 #[derive(Debug)]
 #[repr(C)]

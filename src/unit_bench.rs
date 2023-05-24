@@ -39,10 +39,20 @@ pub fn multifit_stability(c: &mut Criterion) {
         b.iter(|| {
             let num_pts = 250;
             let mut rng = rand::thread_rng();
-            let mut fit =
-                multifit::FitSetup::init(5, num_pts, 1000, 1e-8, 1e-8, 1e-8, 100.0).unwrap();
+            // let mut fit =
+            // multifit::FitSetup::init(5, num_pts, 1000, 1e-8, 1e-8, 1e-8, 100.0).unwrap();
+            let mut fit = multifit::FitSetup::new(num_pts)
+                .stride(5)
+                .max_iterations(1000)
+                .xtol(1e-8)
+                .gtol(1e-8)
+                .ftol(1e-8)
+                .max_av_ratio(0.75)
+                .low_contrast_threshold(100.0)
+                .init()
+                .unwrap();
             let mut data = Vec::with_capacity(num_pts as usize);
-            let center = [100.0, 0.15, 0.0, 200.0];
+            let center = [100.0, 0.15, 0.0, 0.0, 200.0];
 
             // let mut sum_sqr: f32 = 0.0;
             let mut max_dev: f32 = 0.0;
@@ -53,14 +63,15 @@ pub fn multifit_stability(c: &mut Criterion) {
                     center[0] * rng.gen_range(0.7..1.3),
                     center[1] * rng.gen_range(0.85..1.15),
                     rng.gen_range(-PI..PI),
+                    0.0,
                     center[3] + rng.gen_range(-100.0..100.0),
                 ];
                 data.clear();
-                data.extend((0..num_pts).map(|x| multifit::sinusoid(x as f32, act)));
+                data.extend((0..num_pts).map(|x| multifit::sinusoid_five(x as f32, act)));
 
-                println!("data: {:?}", data);
-                let res = fit.fit(data.as_slice(), [0.0, 0.03, 0.0, 0.0]);
-                println!("fit: {:?}", res.params);
+                // println!("data: {:?}", data);
+                let res = fit.fit_five_parameter(data.as_slice(), [0.0, 0.03, 0.0, 0.0, 0.0]);
+                // println!("fit: {:?}", res.params);
                 // let res = fit.fit(data.as_slice(), center);
                 max_dev = max_dev.max((res.params[2] - act[2]).abs());
                 // sum_sqr += (res.params[2] - act[2]).powi(2);
@@ -68,18 +79,18 @@ pub fn multifit_stability(c: &mut Criterion) {
                 if max_dev > 1.0e-3 {
                     println!("act {:?}, fit {:?}", act, res.params);
                 }
-                println!(
-                    "dev_phi: {}, dev_net: {}, avg iter: {}",
-                    max_dev,
-                    (res.params
-                        .iter()
-                        .zip(&act)
-                        .map(|(a, b)| (a - b) * (a - b))
-                        .sum::<f32>()
-                        / res.params.len() as f32)
-                        .sqrt(),
-                    n_iter,
-                );
+                // println!(
+                //     "dev_phi: {}, dev_net: {}, avg iter: {}",
+                //     max_dev,
+                //     (res.params
+                //         .iter()
+                //         .zip(&act)
+                //         .map(|(a, b)| (a - b) * (a - b))
+                //         .sum::<f32>()
+                //         / res.params.len() as f32)
+                //         .sqrt(),
+                //     n_iter,
+                // );
             }
         })
     });

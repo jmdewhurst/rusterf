@@ -23,7 +23,7 @@ where
         .collect::<Vec<u8>>()
         .into()
 }
-fn vecu32_to_bytes(collection: &[i16]) -> Bytes {
+fn veci16_to_bytes(collection: &[i16]) -> Bytes {
     collection
         .iter()
         .flat_map(|x| x.to_le_bytes())
@@ -135,8 +135,8 @@ impl InterfComms {
         msg.push_back(iterf32_to_bytes(&interf.slave_laser.phase_log));
         msg.push_back(iterf32_to_bytes(&interf.slave_laser.feedback_log));
 
-        msg.push_back(vecu32_to_bytes(&interf.last_waveform_ref));
-        msg.push_back(vecu32_to_bytes(&interf.last_waveform_slave));
+        msg.push_back(veci16_to_bytes(&interf.last_waveform_ref));
+        msg.push_back(veci16_to_bytes(&interf.last_waveform_slave));
 
         msg.push_back(iterf32_to_bytes(interf.ref_laser.fit_coefficients));
         msg.push_back(iterf32_to_bytes(interf.slave_laser.fit_coefficients));
