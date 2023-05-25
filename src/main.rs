@@ -257,7 +257,7 @@ async fn main() {
         // if the last fit got a suspicious result, we should reset our ''guess'' parameters
         // to try to avoid getting stuck fitting to a bad mode. Also just reset the guess
         // occasionally just in case.
-        let reset_timer = interf.cycle_counter & ((1 << 12) - 1) == 0;
+        let reset_timer = interf.cycle_counter & ((1 << 14) - 1) == 0;
         if reset_timer
             || last_ref_result.low_contrast
             || last_ref_result.invalid_params
